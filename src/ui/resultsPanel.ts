@@ -85,15 +85,28 @@ export function renderResults(container: HTMLElement, out: SolveOutput | null) {
       diff && r.delayOdd != null ? `odd ${(r.delayOdd * 1e10).toFixed(2)} / even ${(r.delayEven! * 1e10).toFixed(2)} ps/cm` : '',
     );
 
-  const warn = r.warnings.length
-    ? `<div class="alert alert-warning py-2 small mt-2 mb-0">${r.warnings.map(esc).join('<br>')}</div>`
+  // The solver always prints "lossTangent and frequency are not used": its
+  // BEM is quasi-static (L/C/Rdc from field geometry only). We explain that
+  // properly below instead of echoing the alarming raw warning.
+  const realWarnings = r.warnings.filter(
+    (w) => !/lossTangent and frequency/i.test(w) && !/^\*+$/.test(w),
+  );
+  const warn = realWarnings.length
+    ? `<div class="alert alert-warning py-2 small mt-2 mb-0">${realWarnings.map(esc).join('<br>')}</div>`
     : '';
 
-  const minF = r.minFreqMHz
-    ? `<p class="small text-body-secondary mt-2 mb-0">Quasi-static solution; solver notes surface-current
-       assumptions hold above ~${eng(r.minFreqMHz, 3)} MHz. Loss quantities on the Loss tab are analytic
-       post-processing, not part of the field solve.</p>`
-    : '';
+  const minF = `<p class="small text-body-secondary mt-2 mb-0">
+       The field solve is <strong>quasi-static</strong>: it computes L, C and R<sub>dc</sub> from the
+       electrostatic field only — frequency and loss tangent do not enter the solver (they feed the
+       analytic loss model on the Loss tab instead).${
+         r.minFreqMHz
+           ? ` The L/C values assume fully developed skin effect (current on the conductor surfaces),
+       which for this cross-section holds above ≈${eng(r.minFreqMHz, 3)} MHz — that bound is physics,
+       not a setting: it is where the skin depth shrinks below the smallest conductor dimension, so
+       only thicker/wider copper (or lower conductivity) lowers it. Below it, inductance is slightly
+       underestimated.`
+           : ''
+       }</p>`;
 
   container.innerHTML = `
     <div class="row row-cols-2 row-cols-xl-3 g-2">${cards.join('')}</div>

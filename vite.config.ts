@@ -1,17 +1,18 @@
 import { defineConfig } from 'vite';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 export default defineConfig({
   base: './', // static deploy anywhere (subdirectory-friendly)
+  // The project lives inside a Dropbox folder; Dropbox's sync locks files in
+  // node_modules/.vite mid-optimize (EBUSY on rename). Keep the dep cache in
+  // the OS temp dir instead.
+  cacheDir: join(tmpdir(), 'tnt-web-vite-cache'),
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
   },
   worker: {
     format: 'es',
-  },
-  // bem.mjs is emitted by emscripten with dynamic new URL('bem.wasm', import.meta.url);
-  // it lives in public/ and is loaded at runtime by URL, never bundled.
-  optimizeDeps: {
-    exclude: [],
   },
 });

@@ -1,10 +1,11 @@
 /**
  * Guided preset form: geometry + materials + advanced accordion + goal seek.
+ * All dimension fields are canonical-mils dimFields with per-field units.
  */
 import { CONDUCTORS, COVER_MATERIALS, LAMINATES } from '../model/materials.ts';
 import type { PresetKind } from '../model/presets.ts';
 import { store } from '../model/store.ts';
-import type { GoalSeekIter } from '../analysis/goalSeek.ts';
+import { bindDimFields, dimFieldHtml, formatDim, retargetDimFields, type DimUnit } from './dimField.ts';
 
 const KINDS: Array<{ id: PresetKind; label: string }> = [
   { id: 'microstrip', label: 'Microstrip' },
@@ -12,12 +13,20 @@ const KINDS: Array<{ id: PresetKind; label: string }> = [
   { id: 'cpw', label: 'Coplanar' },
 ];
 
+/** standard copper weights: oz/ft² -> thickness in mils (1 oz = 1.37 mil) */
+const COPPER_WEIGHTS: Array<{ label: string; mils: number }> = [
+  { label: '¼ oz', mils: 0.35 },
+  { label: '½ oz', mils: 0.7 },
+  { label: '1 oz', mils: 1.4 },
+  { label: '2 oz', mils: 2.8 },
+  { label: '3 oz', mils: 4.2 },
+];
+
 export interface PresetFormHooks {
   onGoalSeek: (
     mode: 'z0' | 'zdiff' | 'zodd' | 'zeven',
     seekParam: 'w' | 's',
     target: number,
-    onIter: (it: GoalSeekIter) => void,
   ) => Promise<{ ok: boolean; x?: number; message: string }>;
 }
 
@@ -32,26 +41,21 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   const kind = s.presetKind;
   const variant = s.presetVariant;
   const diff = variant === 'diff';
+  const unit = s.displayUnit as DimUnit;
 
-  const numField = (id: string, label: string, value: number, step = 'any', suffix: string = s.presetParams.units) => `
-    <div class="col-6 col-xxl-4">
-      <label class="form-label mb-0 small" for="pf-${id}">${label}</label>
-      <div class="input-group input-group-sm">
-        <input type="number" step="${step}" class="form-control" id="pf-${id}" value="${value}">
-        <span class="input-group-text">${suffix}</span>
-      </div>
-    </div>`;
+  const dim = (id: string, label: string, mils: number) =>
+    dimFieldHtml({ id: `pf-${id}`, label, mils, unit, min: 0.01 });
 
   const lamOptions = LAMINATES.map(
-    (l) => `<option value="${l.name}" ${Math.abs(l.er - p.er) < 1e-9 && Math.abs(l.tanD - p.tanD) < 1e-9 ? 'selected' : ''}>${l.name} (εr ${l.er})</option>`,
+    (l) =>
+      `<option value="${l.name}" ${Math.abs(l.er - p.er) < 1e-9 && Math.abs(l.tanD - p.tanD) < 1e-9 ? 'selected' : ''}>${l.name} (εr ${l.er})</option>`,
   ).join('');
-  // several materials share a conductivity (copper/lead both 5.0e7):
-  // mark only the first match selected
   const firstCondMatch = CONDUCTORS.findIndex((c) => Math.abs(c.sigma - p.sigma) < 1);
   const condOptions = CONDUCTORS.map(
     (c, i) => `<option value="${c.name}" ${i === firstCondMatch ? 'selected' : ''}>${c.name}</option>`,
   ).join('');
   const coverOptions = COVER_MATERIALS.map((c, i) => `<option value="${i}">${c.name} (εr ${c.er})</option>`).join('');
+  const wIdx = COPPER_WEIGHTS.findIndex((wt) => Math.abs(wt.mils - p.t) / wt.mils < 0.02);
 
   container.innerHTML = `
     <div class="d-flex gap-2 flex-wrap mb-3">
@@ -68,25 +72,41 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
         <input type="radio" class="btn-check" name="pf-var" id="pf-var-diff" ${diff ? 'checked' : ''}>
         <label class="btn btn-outline-secondary" for="pf-var-diff">Differential</label>
       </div>
-      <select class="form-select form-select-sm w-auto ms-auto" id="pf-units" title="units">
-        ${['mils', 'microns', 'inches', 'meters'].map((u) => `<option ${u === p.units ? 'selected' : ''}>${u}</option>`).join('')}
-      </select>
+      <div class="input-group input-group-sm w-auto ms-auto" title="display units for all fields (each field's unit button also cycles individually; typing 1mm, 35um, 0.1in converts automatically)">
+        <span class="input-group-text">Display units</span>
+        <select class="form-select" id="pf-units" style="max-width:6rem">
+          ${(['mils', 'mm', 'um', 'inch'] as DimUnit[]).map((u) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u === 'um' ? 'µm' : u === 'inch' ? 'in' : u}</option>`).join('')}
+        </select>
+      </div>
     </div>
 
     <div class="row g-2">
-      ${numField('w', 'Trace width w', p.w)}
-      ${diff ? numField('s', 'Gap s (edge–edge)', p.s) : ''}
-      ${numField('t', 'Trace thickness t', p.t)}
-      ${numField('etch', 'Etch factor', p.etch, '0.05', 'per side')}
-      ${numField('h', kind === 'stripline' ? 'Dielectric below h₁' : 'Dielectric height h', p.h)}
-      ${kind === 'stripline' ? numField('h2', 'Dielectric above h₂', p.h2) : ''}
-      ${kind === 'cpw' ? numField('cpwGap', 'Coplanar gap g', p.cpwGap) : ''}
-      ${kind === 'cpw' ? numField('cpwGroundWidth', 'Side ground width', p.cpwGroundWidth) : ''}
+      ${dim('w', 'Trace Width', p.w)}
+      ${diff ? dim('s', 'Pair Gap (edge to edge)', p.s) : ''}
+      <div class="col-6 col-xxl-4">
+        <label class="form-label mb-0 small" for="pf-copper-weight">Copper Weight</label>
+        <select class="form-select form-select-sm" id="pf-copper-weight">
+          ${COPPER_WEIGHTS.map((wt, i) => `<option value="${i}" ${i === wIdx ? 'selected' : ''}>${wt.label}</option>`).join('')}
+          <option value="custom" ${wIdx < 0 ? 'selected' : ''}>custom…</option>
+        </select>
+      </div>
+      ${dim('t', 'Trace Thickness', p.t)}
+      <div class="col-6 col-xxl-4">
+        <label class="form-label mb-0 small" for="pf-etch">Etch Factor (inset per side)</label>
+        <div class="input-group input-group-sm">
+          <input type="number" step="0.05" min="0" max="1" class="form-control" id="pf-etch" value="${p.etch}">
+          <span class="input-group-text">× t</span>
+        </div>
+      </div>
+      ${dim('h', kind === 'stripline' ? 'Dielectric Below Trace (h₁)' : 'Dielectric Height', p.h)}
+      ${kind === 'stripline' ? dim('h2', 'Dielectric Above Trace (h₂)', p.h2) : ''}
+      ${kind === 'cpw' ? dim('cpwGap', 'Coplanar Gap (trace to ground)', p.cpwGap) : ''}
+      ${kind === 'cpw' ? dim('cpwGroundWidth', 'Side Ground Width', p.cpwGroundWidth) : ''}
     </div>
     ${kind === 'cpw' ? `
       <div class="form-check form-check-inline mt-2">
         <input class="form-check-input" type="checkbox" id="pf-cpwbg" ${p.cpwBottomGround ? 'checked' : ''}>
-        <label class="form-check-label small" for="pf-cpwbg">Bottom ground plane (grounded CPW)</label>
+        <label class="form-check-label small" for="pf-cpwbg">Bottom ground plane (grounded coplanar)</label>
       </div>` : ''}
 
     <div class="row g-2 mt-1">
@@ -97,20 +117,12 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
         </select>
       </div>
       <div class="col-3">
-        <label class="form-label mb-0 small" for="pf-er">εr</label>
+        <label class="form-label mb-0 small" for="pf-er">Permittivity ε<sub>r</sub></label>
         <input type="number" step="0.01" class="form-control form-control-sm" id="pf-er" value="${p.er}">
       </div>
       <div class="col-3">
-        <label class="form-label mb-0 small" for="pf-tand">tan δ</label>
+        <label class="form-label mb-0 small" for="pf-tand">Loss Tangent</label>
         <input type="number" step="0.001" class="form-control form-control-sm" id="pf-tand" value="${p.tanD}">
-      </div>
-      <div class="col-6">
-        <label class="form-label mb-0 small">Conductor</label>
-        <select class="form-select form-select-sm" id="pf-conductor">${condOptions}</select>
-      </div>
-      <div class="col-6">
-        <label class="form-label mb-0 small" for="pf-sigma">σ (S/m)</label>
-        <input type="number" step="1e6" class="form-control form-control-sm" id="pf-sigma" value="${p.sigma}">
       </div>
     </div>
 
@@ -118,13 +130,14 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     <div class="mt-2">
       <div class="form-check form-check-inline">
         <input class="form-check-input" type="checkbox" id="pf-cover" ${p.cover ? 'checked' : ''}>
-        <label class="form-check-label small" for="pf-cover">Cover dielectric (solder mask)</label>
+        <label class="form-check-label small" for="pf-cover">Cover dielectric (conformal solder mask — constant thickness following the copper)</label>
       </div>
       <div class="row g-2 mt-0 ${p.cover ? '' : 'd-none'}" id="pf-cover-row">
         <div class="col-6">
+          <label class="form-label mb-0 small">Mask Material</label>
           <select class="form-select form-select-sm" id="pf-cover-mat">${coverOptions}</select>
         </div>
-        ${numField('cover-t', 'Mask thickness', p.cover?.thickness ?? Math.max(p.t * 1.4, 1))}
+        ${p.cover ? dim('cover-t', 'Mask Thickness', p.cover.thickness) : ''}
       </div>
     </div>` : ''}
 
@@ -132,19 +145,45 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
       <div class="accordion-item">
         <h2 class="accordion-header">
           <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#pf-adv-body">
-            Advanced (mesh &amp; crosstalk line params)
+            Advanced (conductor material, mesh &amp; crosstalk parameters)
           </button>
         </h2>
         <div id="pf-adv-body" class="accordion-collapse collapse" data-bs-parent="#pf-adv">
           <div class="accordion-body py-2">
             <div class="row g-2">
-              ${numField('cseg', 'Conductor segments (CSEG)', p.cseg, '1', 'segs')}
-              ${numField('dseg', 'Plane/dielectric segments (DSEG)', p.dseg, '1', 'segs')}
-              ${numField('cplen', 'Coupling length', p.couplingLengthM * 1000, 'any', 'mm')}
-              ${numField('rise', 'Rise time', p.riseTimePs, '1', 'ps')}
+              <div class="col-6">
+                <label class="form-label mb-0 small">Conductor Material</label>
+                <select class="form-select form-select-sm" id="pf-conductor">${condOptions}</select>
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-0 small" for="pf-sigma">Conductivity σ (S/m)</label>
+                <input type="number" step="1e6" class="form-control form-control-sm" id="pf-sigma" value="${p.sigma}">
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-0 small" for="pf-cseg">Conductor Mesh Segments (CSEG)</label>
+                <input type="number" step="1" min="4" max="100" class="form-control form-control-sm" id="pf-cseg" value="${p.cseg}">
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-0 small" for="pf-dseg">Plane/Dielectric Mesh Segments (DSEG)</label>
+                <input type="number" step="1" min="4" max="100" class="form-control form-control-sm" id="pf-dseg" value="${p.dseg}">
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-0 small" for="pf-cplen">Coupling Length (crosstalk)</label>
+                <div class="input-group input-group-sm">
+                  <input type="number" step="any" class="form-control" id="pf-cplen" value="${p.couplingLengthM * 1000}">
+                  <span class="input-group-text">mm</span>
+                </div>
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-0 small" for="pf-rise">Rise Time (crosstalk)</label>
+                <div class="input-group input-group-sm">
+                  <input type="number" step="1" class="form-control" id="pf-rise" value="${p.riseTimePs}">
+                  <span class="input-group-text">ps</span>
+                </div>
+              </div>
             </div>
-            <p class="small text-body-secondary mt-2 mb-0">CSEG/DSEG control BEM mesh density: 10 is quick,
-            20 good, 45+ high accuracy (slower). Coupling length &amp; rise time affect only the crosstalk figures.</p>
+            <p class="small text-body-secondary mt-2 mb-0">Mesh density: 10 quick, 20 good, 45+ high accuracy
+            (slower). Coupling length &amp; rise time only affect the crosstalk figures.</p>
           </div>
         </div>
       </div>
@@ -154,7 +193,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
       <div class="card-body py-2">
         <div class="d-flex align-items-end gap-2 flex-wrap">
           <div>
-            <label class="form-label mb-0 small">Goal seek</label>
+            <label class="form-label mb-0 small">Goal seek — auto-tune to a target impedance</label>
             <div class="input-group input-group-sm">
               <span class="input-group-text">target</span>
               <input type="number" class="form-control" id="gs-target" value="${diff ? 100 : 50}" style="max-width:5.5rem">
@@ -168,14 +207,17 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
           </div>
           <div class="btn-group btn-group-sm" role="group">
             <input type="radio" class="btn-check" name="gs-param" id="gs-param-w" checked>
-            <label class="btn btn-outline-secondary" for="gs-param-w">tune w</label>
+            <label class="btn btn-outline-secondary" for="gs-param-w">tune width</label>
             ${diff ? `
             <input type="radio" class="btn-check" name="gs-param" id="gs-param-s">
-            <label class="btn btn-outline-secondary" for="gs-param-s">tune s</label>` : ''}
+            <label class="btn btn-outline-secondary" for="gs-param-s">tune gap</label>` : ''}
           </div>
-          <button class="btn btn-sm btn-success" id="gs-run">Seek</button>
+          <button class="btn btn-sm btn-success" id="gs-run">
+            <span class="spinner-border spinner-border-sm d-none" id="gs-spinner"></span> Seek
+          </button>
         </div>
-        <div id="gs-progress" class="small font-monospace mt-2"></div>
+        <div id="gs-result" class="small mt-2"></div>
+        <div class="tiny text-body-secondary">iteration details appear in the Log tab</div>
       </div>
     </div>
   `;
@@ -191,22 +233,56 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   }
   container.querySelector('#pf-var-se')!.addEventListener('change', () => store.update({ presetVariant: 'se' }));
   container.querySelector('#pf-var-diff')!.addEventListener('change', () => store.update({ presetVariant: 'diff' }));
-  (container.querySelector('#pf-units') as HTMLSelectElement).addEventListener('change', (e) =>
-    upd({ units: (e.target as HTMLSelectElement).value as typeof p.units }),
-  );
+
+  (container.querySelector('#pf-units') as HTMLSelectElement).addEventListener('change', (e) => {
+    const u = (e.target as HTMLSelectElement).value as DimUnit;
+    store.update({ displayUnit: u });
+    retargetDimFields(container, u);
+  });
+
+  /* dimension fields (canonical mils) */
+  const DIM_KEYS: Record<string, (v: number) => void> = {
+    'pf-w': (v) => upd({ w: v }),
+    'pf-s': (v) => upd({ s: v }),
+    'pf-t': (v) => {
+      upd({ t: v });
+      syncCopperWeight(v);
+    },
+    'pf-h': (v) => upd({ h: v }),
+    'pf-h2': (v) => upd({ h2: v }),
+    'pf-cpwGap': (v) => upd({ cpwGap: v }),
+    'pf-cpwGroundWidth': (v) => upd({ cpwGroundWidth: v }),
+    'pf-cover-t': (v) => {
+      const cur = store.get().presetParams.cover;
+      if (cur) upd({ cover: { ...cur, thickness: v } });
+    },
+  };
+  bindDimFields(container, {
+    onChange: (id, mils) => DIM_KEYS[id]?.(mils),
+  });
+
+  /* copper weight <-> thickness */
+  const weightSel = container.querySelector('#pf-copper-weight') as HTMLSelectElement;
+  const syncCopperWeight = (tMils: number) => {
+    const i = COPPER_WEIGHTS.findIndex((wt) => Math.abs(wt.mils - tMils) / wt.mils < 0.02);
+    weightSel.value = i >= 0 ? String(i) : 'custom';
+  };
+  weightSel.addEventListener('change', () => {
+    if (weightSel.value === 'custom') return;
+    const wt = COPPER_WEIGHTS[parseInt(weightSel.value, 10)];
+    upd({ t: wt.mils });
+    const tField = container.querySelector('#pf-t') as HTMLInputElement | null;
+    if (tField) {
+      tField.dataset.mils = String(wt.mils);
+      tField.value = formatDim(wt.mils, tField.dataset.unit as DimUnit);
+    }
+  });
 
   const bindNum = (id: string, apply: (v: number) => void) => {
     const el = container.querySelector(`#pf-${id}`) as HTMLInputElement | null;
     el?.addEventListener('change', () => apply(num(el.value, 0)));
   };
-  bindNum('w', (v) => upd({ w: v }));
-  bindNum('s', (v) => upd({ s: v }));
-  bindNum('t', (v) => upd({ t: v }));
   bindNum('etch', (v) => upd({ etch: Math.min(Math.max(v, 0), 1) }));
-  bindNum('h', (v) => upd({ h: v }));
-  bindNum('h2', (v) => upd({ h2: v }));
-  bindNum('cpwGap', (v) => upd({ cpwGap: v }));
-  bindNum('cpwGroundWidth', (v) => upd({ cpwGroundWidth: v }));
   bindNum('er', (v) => upd({ er: v }));
   bindNum('tand', (v) => upd({ tanD: v }));
   bindNum('sigma', (v) => upd({ sigma: v }));
@@ -233,7 +309,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   coverBox?.addEventListener('change', () => {
     if (coverBox.checked) {
       const mat = COVER_MATERIALS[0];
-      upd({ cover: { thickness: Math.max(p.t * 1.4, 1), er: mat.er, tanD: mat.tanD } });
+      upd({ cover: { thickness: 1.0, er: mat.er, tanD: mat.tanD } });
     } else {
       upd({ cover: null });
     }
@@ -243,34 +319,27 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     const cur = store.get().presetParams.cover;
     if (mat && cur) upd({ cover: { ...cur, er: mat.er, tanD: mat.tanD } });
   });
-  bindNum('cover-t', (v) => {
-    const cur = store.get().presetParams.cover;
-    if (cur) upd({ cover: { ...cur, thickness: v } });
-  });
 
-  /* ---- goal seek ---- */
+  /* ---- goal seek (quiet: result only; details go to the Log tab) ---- */
   const gsBtn = container.querySelector('#gs-run') as HTMLButtonElement;
-  const gsProgress = container.querySelector('#gs-progress') as HTMLElement;
+  const gsSpinner = container.querySelector('#gs-spinner') as HTMLElement;
+  const gsResult = container.querySelector('#gs-result') as HTMLElement;
   gsBtn.addEventListener('click', async () => {
     const target = num((container.querySelector('#gs-target') as HTMLInputElement).value, diff ? 100 : 50);
     const mode = ((container.querySelector('#gs-mode') as HTMLSelectElement).value || 'z0') as
       | 'z0' | 'zdiff' | 'zodd' | 'zeven';
     const seekParam = (container.querySelector('#gs-param-s') as HTMLInputElement | null)?.checked ? 's' : 'w';
     gsBtn.disabled = true;
-    gsProgress.textContent = 'seeking…';
-    const lines: string[] = [];
+    gsSpinner.classList.remove('d-none');
+    gsResult.textContent = '';
     try {
-      const res = await hooks.onGoalSeek(mode, seekParam, target, (it) => {
-        lines.push(
-          `#${it.i}  ${seekParam} = ${it.x.toPrecision(5)}  →  ${it.z == null ? 'failed' : it.z.toFixed(2) + ' Ω'}  (cseg ${it.cseg})`,
-        );
-        gsProgress.innerHTML = lines.slice(-6).join('<br>');
-      });
-      gsProgress.innerHTML = `${lines.slice(-4).join('<br>')}<br><strong class="${res.ok ? 'text-success' : 'text-danger'}">${res.message}</strong>`;
+      const res = await hooks.onGoalSeek(mode, seekParam, target);
+      gsResult.innerHTML = `<strong class="${res.ok ? 'text-success' : 'text-danger'}">${res.message}</strong>`;
     } catch (e) {
-      gsProgress.innerHTML = `<span class="text-danger">${(e as Error).message}</span>`;
+      gsResult.innerHTML = `<span class="text-danger">${(e as Error).message}</span>`;
     } finally {
       gsBtn.disabled = false;
+      gsSpinner.classList.add('d-none');
     }
   });
 }

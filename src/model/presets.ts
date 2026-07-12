@@ -139,18 +139,64 @@ export function buildPreset(
 ): Stackup {
   const n = variant === 'diff' ? 2 : 1;
   const items: StackupItem[] = [];
-  const coverLayer = (): StackupItem[] =>
-    p.cover
-      ? [
-          {
-            kind: 'DielectricLayer',
-            id: 'cover',
-            thickness: Math.max(p.cover.thickness, p.t * 1.05),
-            permittivity: p.cover.er,
-            lossTangent: p.cover.tanD,
-          } as StackupItem,
-        ]
-      : [];
+
+  /**
+   * Conformal cover (solder mask): constant z-thickness tm over the copper.
+   *
+   * The solver supports dielectric LAYERS clipped around conductors, but not
+   * dielectric BLOCKS overlapping conductors -- so the model must never let
+   * the lump intersect the trace. Split by regime:
+   *   - layer thickness = max(t, tm): embeds the traces completely (their
+   *     sidewalls are always mask-covered),
+   *   - lump height = min(t, tm) over each conductor footprint (+tm each
+   *     side), sitting on the layer top.
+   * Over the trace the mask is exactly tm thick in both regimes; between
+   * traces it is tm when tm >= t, and slightly over-thick (t) when tm < t.
+   * Overlapping lumps merge (tight diff pairs); the parser places only one
+   * rectangle per object, so each lump is its own item.
+   */
+  const coverItems = (conductorSpans: Array<[number, number]>): StackupItem[] => {
+    if (!p.cover) return [];
+    const tm = p.cover.thickness;
+    const expanded = conductorSpans
+      .map(([a, b]): [number, number] => [a - tm, b + tm])
+      .sort((s1, s2) => s1[0] - s2[0]);
+    const merged: Array<[number, number]> = [];
+    for (const s of expanded) {
+      const last = merged[merged.length - 1];
+      if (last && s[0] <= last[1]) last[1] = Math.max(last[1], s[1]);
+      else merged.push([...s] as [number, number]);
+    }
+    return [
+      {
+        kind: 'DielectricLayer',
+        id: 'coverLayer',
+        thickness: Math.max(p.t, tm),
+        permittivity: p.cover.er,
+        lossTangent: p.cover.tanD,
+      } as StackupItem,
+      ...merged.map(
+        ([a, b], i): StackupItem => ({
+          kind: 'RectangleDielectric',
+          id: `coverLump${i}`,
+          width: b - a,
+          height: Math.min(p.t, tm),
+          permittivity: p.cover!.er,
+          xOffset: a,
+          yOffset: 0,
+        }),
+      ),
+    ];
+  };
+
+  /** conductor footprints (x spans) for the cover lumps */
+  const traceSpans = (xStart: number): Array<[number, number]> => {
+    const wmax = Math.max(p.w, topWidthOf(p.w, p.t, p.etch));
+    return Array.from({ length: n }, (_, k): [number, number] => {
+      const cx = xStart + k * (p.w + p.s);
+      return [cx, cx + wmax];
+    });
+  };
 
   if (kind === 'microstrip') {
     const margin = marginFor(p, kind, variant);
@@ -158,7 +204,7 @@ export function buildPreset(
       { kind: 'GroundPlane', id: 'gnd' },
       { kind: 'DielectricLayer', id: 'sub', thickness: p.h, permittivity: p.er, lossTangent: p.tanD },
       trace(p, 'trace', n, margin),
-      ...coverLayer(),
+      ...coverItems(traceSpans(margin)),
     );
   } else if (kind === 'stripline') {
     const margin = marginFor(p, kind, variant);
@@ -213,7 +259,11 @@ export function buildPreset(
         height: p.t,
       },
       { ...trace(p, 'trace', n, margin + wg + g) },
-      ...coverLayer(),
+      ...coverItems([
+        [margin, margin + wg],
+        [margin + flankPitch, margin + flankPitch + wg],
+        ...traceSpans(margin + wg + g),
+      ]),
     );
   }
 

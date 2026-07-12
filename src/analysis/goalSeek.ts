@@ -1,12 +1,16 @@
 /**
- * Goal seek: tune one preset parameter (trace width w, or diff gap s) until
- * the solved impedance hits a target. Secant iteration with a bisection
- * safeguard on a sign-change bracket (Brent-lite) -- deliberately better than
- * TNT's fixed-increment march (bem/lib/bem_iterate.tcl).
+ * Goal seek: tune trace width w (or diff gap s) to a target impedance.
  *
- * Runs inside the solver worker: each evaluation regenerates the .xsctn from
- * the preset and solves in a fresh wasm instance. A coarse-mesh pass finds
- * the neighborhood cheaply; the final iterations run at the user's cseg.
+ * Algorithm (per spec):
+ *   Phase 1 -- bracket: starting from the current value, jump DOWN or UP by
+ *   a factor of 2 (halve/double, in the direction that moves Z toward the
+ *   target) for up to 10 rounds until the target is crossed.
+ *   Phase 2 -- refine: 10 rounds of bisection inside the bracket.
+ *   Then round the variable to 4 significant figures, solve once at the
+ *   rounded value, and return that answer.
+ *
+ * Every evaluation is appended to a detailed log (surfaced in the Log tab);
+ * the goal-seek box itself only shows the final answer.
  */
 import { buildPreset, type PresetKind, type PresetParams, type PresetVariant } from '../model/presets.ts';
 import { generateXsctn } from '../xsctn/generate.ts';
@@ -21,16 +25,13 @@ export interface GoalSeekSpec {
   seekParam: SeekParam;
   mode: SeekMode;
   target: number;
-  tolOhms?: number;
-  maxIter?: number;
-  coarseCseg?: number;
 }
 
 export interface GoalSeekIter {
   i: number;
+  phase: 'bracket' | 'refine' | 'final';
   x: number;
   z: number | null;
-  cseg: number;
 }
 
 export interface GoalSeekOutcome {
@@ -39,6 +40,7 @@ export interface GoalSeekOutcome {
   z?: number;
   iterations: number;
   message: string;
+  log: string[];
 }
 
 interface MiniSolveResult {
@@ -66,123 +68,110 @@ function extractZ(mode: SeekMode, r: MiniSolveResult): number | null {
   }
 }
 
+const round4sig = (x: number): number => parseFloat(x.toPrecision(4));
+
 export async function runGoalSeek(
   spec: GoalSeekSpec,
   solve: SolveFn,
   onIter: (it: GoalSeekIter) => void,
 ): Promise<GoalSeekOutcome> {
-  const tol = spec.tolOhms ?? 0.25;
-  const maxIter = spec.maxIter ?? 24;
-  const coarse = spec.coarseCseg ?? 10;
+  const log: string[] = [];
   const p0 = spec.params;
-
-  // seek bounds in stackup units
-  const x0 = spec.seekParam === 'w' ? p0.w : p0.s;
-  const lo = spec.seekParam === 'w' ? Math.max(0.05, 0.05 * x0) : Math.max(0.05, 0.05 * x0);
-  const hi = spec.seekParam === 'w' ? Math.max(40 * p0.h, 10 * x0) : Math.max(20 * p0.h, 10 * x0);
-
   let evals = 0;
-  const evalAt = async (x: number, cseg: number): Promise<number | null> => {
-    const params: PresetParams = { ...p0, cseg, dseg: cseg };
+
+  const evalAt = async (x: number, phase: GoalSeekIter['phase']): Promise<number | null> => {
+    const params: PresetParams = { ...p0 };
     if (spec.seekParam === 'w') params.w = x;
     else params.s = x;
     const stackup = buildPreset(spec.kind, spec.variant, params);
-    const out = await solve({ xsctn: generateXsctn(stackup), cseg, dseg: cseg });
+    const out = await solve({
+      xsctn: generateXsctn(stackup),
+      cseg: stackup.cseg,
+      dseg: stackup.dseg,
+    });
     evals++;
     const z = out.ok && out.result ? extractZ(spec.mode, out.result) : null;
-    onIter({ i: evals, x, z, cseg });
+    log.push(
+      `[${phase}] #${evals}  ${spec.seekParam} = ${x.toPrecision(6)}  ->  ${
+        z == null ? 'solve failed' : z.toFixed(3) + ' ohm'
+      }  (target ${spec.target})`,
+    );
+    onIter({ i: evals, phase, x, z });
     return z != null && Number.isFinite(z) ? z : null;
   };
 
-  // f(x) = Z(x) - target. Z decreases with w; increases with s (zdiff/zodd).
-  const f = async (x: number, cseg: number) => {
-    const z = await evalAt(x, cseg);
-    return z == null ? null : z - spec.target;
-  };
+  // direction of dZ/dx: Z falls as w grows; Z (odd/diff/even) rises as s grows
+  const zRisesWithX = spec.seekParam === 's';
 
-  // ---- phase 1: bracket a sign change at coarse mesh ----
-  let a = Math.min(Math.max(x0, lo), hi);
-  let fa = await f(a, coarse);
-  if (fa === null) return { ok: false, iterations: evals, message: 'initial solve failed' };
-  if (Math.abs(fa) <= tol) {
-    // already close -- refine at full mesh below
-  }
-  // direction that reduces |f|: dZ/dw < 0, dZ/ds > 0 (for zdiff/zodd)
-  const increasesZ = spec.seekParam === 's';
-  const wantLarger = increasesZ ? fa < 0 : fa > 0;
-  let b = a;
-  let fb = fa;
-  let step = Math.max(0.25 * a, 0.05);
-  for (let k = 0; k < 12 && fa * fb > 0; k++) {
-    b = wantLarger ? Math.min(b + step, hi) : Math.max(b - step, lo);
-    const v = await f(b, coarse);
-    if (v === null) {
-      // invalid geometry (e.g. solver NaN) -- shrink the step and retry
-      b = wantLarger ? Math.max(b - step / 2, lo) : Math.min(b + step / 2, hi);
-      step /= 2;
-      continue;
-    }
-    fb = v;
-    step *= 1.6;
-    if ((b === lo || b === hi) && fa * fb > 0) {
-      return {
-        ok: false,
-        iterations: evals,
-        message: `target ${spec.target} Ω not reachable within ${spec.seekParam} ∈ [${lo.toPrecision(3)}, ${hi.toPrecision(3)}]`,
-      };
-    }
-  }
-  if (fa * fb > 0) {
-    return { ok: false, iterations: evals, message: 'could not bracket the target' };
+  const x0 = spec.seekParam === 'w' ? p0.w : p0.s;
+  let xA = x0;
+  let zA = await evalAt(xA, 'bracket');
+  if (zA === null) {
+    return { ok: false, iterations: evals, message: 'initial solve failed', log };
   }
 
-  // ---- phase 2: secant + bisection on [a,b], switching to full mesh near tol ----
-  let x1 = a;
-  let f1 = fa;
-  let x2 = b;
-  let f2 = fb;
-  let best = Math.abs(f1) < Math.abs(f2) ? { x: x1, fz: f1 } : { x: x2, fz: f2 };
-  let fineMesh = false;
-
-  while (evals < maxIter) {
-    // secant candidate
-    let xn = x2 - (f2 * (x2 - x1)) / (f2 - f1 || 1e-30);
-    const [blo, bhi] = x1 < x2 ? [x1, x2] : [x2, x1];
-    if (!(xn > blo && xn < bhi)) xn = (blo + bhi) / 2; // bisection fallback
-
-    const useFine: boolean = fineMesh || Math.abs(best.fz) < Math.max(4 * tol, 2);
-    fineMesh = fineMesh || useFine;
-    const cseg = useFine ? spec.params.cseg : coarse;
-    const fn = await f(xn, cseg);
-    if (fn === null) {
-      // treat as failure at that x: bisect away from it
-      xn = (blo + bhi) / 2;
-      continue;
+  /* ---- phase 1: halve/double toward the target, max 10 rounds ---- */
+  let xB = xA;
+  let zB = zA;
+  let crossed = Math.sign(zA - spec.target) === 0;
+  for (let round = 0; round < 10 && !crossed; round++) {
+    const needHigherZ = zB < spec.target;
+    const goUp = needHigherZ === zRisesWithX; // grow x if that raises Z toward target
+    const xNext = goUp ? xB * 2 : xB / 2;
+    const zNext = await evalAt(xNext, 'bracket');
+    if (zNext === null) {
+      // solver failed there (geometry too extreme) -- stop expanding
+      log.push(`[bracket] stop: solver failed at ${spec.seekParam} = ${xNext.toPrecision(6)}`);
+      break;
     }
-    if (Math.abs(fn) < Math.abs(best.fz)) best = { x: xn, fz: fn };
-    if (Math.abs(fn) <= tol && useFine) {
-      return {
-        ok: true,
-        x: xn,
-        z: fn + spec.target,
-        iterations: evals,
-        message: `converged: ${spec.seekParam} = ${xn.toPrecision(5)} → ${(fn + spec.target).toFixed(2)} Ω in ${evals} solves`,
-      };
-    }
-    // keep the sign-change bracket
-    if (f1 * fn < 0) {
-      x2 = xn;
-      f2 = fn;
+    xA = xB;
+    zA = zB;
+    xB = xNext;
+    zB = zNext;
+    crossed = (zA - spec.target) * (zB - spec.target) <= 0;
+  }
+  if (!crossed) {
+    const best = Math.abs(zB - spec.target) < Math.abs(zA - spec.target) ? { x: xB, z: zB } : { x: xA, z: zA };
+    return {
+      ok: false,
+      x: best.x,
+      z: best.z,
+      iterations: evals,
+      message: `target not crossed within 10 doubling/halving rounds (closest ${best.z.toFixed(2)} Ω at ${spec.seekParam} = ${best.x.toPrecision(5)})`,
+      log,
+    };
+  }
+
+  /* ---- phase 2: 10 bisection refinements ---- */
+  let lo = Math.min(xA, xB);
+  let hi = Math.max(xA, xB);
+  let fLo = lo === xA ? zA! - spec.target : zB! - spec.target;
+  let best = Math.abs(zA! - spec.target) < Math.abs(zB! - spec.target) ? { x: xA, z: zA! } : { x: xB, z: zB! };
+  for (let round = 0; round < 10; round++) {
+    const mid = (lo + hi) / 2;
+    const zMid = await evalAt(mid, 'refine');
+    if (zMid === null) break;
+    if (Math.abs(zMid - spec.target) < Math.abs(best.z - spec.target)) best = { x: mid, z: zMid };
+    const fMid = zMid - spec.target;
+    if (fLo * fMid <= 0) {
+      hi = mid;
     } else {
-      x1 = xn;
-      f1 = fn;
+      lo = mid;
+      fLo = fMid;
     }
   }
+
+  /* ---- round to 4 significant figures, final answer ---- */
+  const xFinal = round4sig(best.x);
+  const zFinal = await evalAt(xFinal, 'final');
+  const z = zFinal ?? best.z;
+  log.push(`[final] ${spec.seekParam} = ${xFinal} (4 sig figs) -> ${z.toFixed(3)} ohm`);
   return {
-    ok: false,
-    x: best.x,
-    z: best.fz + spec.target,
+    ok: true,
+    x: xFinal,
+    z,
     iterations: evals,
-    message: `did not converge in ${evals} solves (best ${(best.fz + spec.target).toFixed(2)} Ω at ${spec.seekParam} = ${best.x.toPrecision(5)})`,
+    message: `${spec.seekParam} = ${xFinal} → ${z.toFixed(2)} Ω (${evals} solves)`,
+    log,
   };
 }

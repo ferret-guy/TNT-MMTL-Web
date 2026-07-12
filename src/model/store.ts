@@ -5,6 +5,7 @@ import type { LossParams, SolveOutput, Stackup } from './types.ts';
 import { buildPreset, defaultParams, type PresetKind, type PresetParams, type PresetVariant } from './presets.ts';
 
 export type InputMode = 'preset' | 'freeform';
+export type DisplayUnit = 'mils' | 'mm' | 'um' | 'inch';
 
 export interface AppState {
   mode: InputMode;
@@ -14,6 +15,11 @@ export interface AppState {
   /** free-form stackup (independent of presets) */
   freeform: Stackup;
   lossParams: LossParams;
+  /** default display unit for dimension fields (model is canonical mils) */
+  displayUnit: DisplayUnit;
+  /** line length [m] + design frequency [Hz] for the loss/line stats panel */
+  lineLengthM: number;
+  designFreqHz: number;
   lastSolve: SolveOutput | null;
   solving: boolean;
 }
@@ -46,6 +52,9 @@ export function defaultState(): AppState {
       fMaxHz: 1e11,
       nPoints: 160,
     },
+    displayUnit: 'mils',
+    lineLengthM: 0.1, // 10 cm
+    designFreqHz: 1e9,
     lastSolve: null,
     solving: false,
   };

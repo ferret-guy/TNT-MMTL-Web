@@ -16,6 +16,7 @@
  */
 import type { Stackup, StackupItem } from '../model/types.ts';
 import { isConductor } from '../model/types.ts';
+import { formatDim, type DimUnit } from './dimField.ts';
 
 export interface PlacedPoly {
   kind: 'layer' | 'block' | 'conductor' | 'ground';
@@ -37,6 +38,8 @@ export interface Geometry {
   domainX0: number;
   domainX1: number;
   yTop: number; // top of highest dielectric
+  /** top of the tallest feature incl. conductors/blocks */
+  yMax: number;
   totW: number;
   signalNames: string[];
 }
@@ -52,6 +55,7 @@ export function computeGeometry(s: Stackup): Geometry {
   let y = 0;
   let totW = 0;
   let yTop = 0;
+  let yMax = 0;
   const polys: PlacedPoly[] = [];
   const signalNames: string[] = [];
   let groundPlanes = 0;
@@ -89,6 +93,7 @@ export function computeGeometry(s: Stackup): Geometry {
         });
         y += it.thickness;
         yTop = Math.max(yTop, y);
+        yMax = Math.max(yMax, y);
         break;
       }
       case 'RectangleDielectric': {
@@ -104,6 +109,7 @@ export function computeGeometry(s: Stackup): Geometry {
           isGroundConductor: false,
           er: it.permittivity,
         });
+        yMax = Math.max(yMax, y + it.height);
         break;
       }
       default: {
@@ -157,6 +163,7 @@ export function computeGeometry(s: Stackup): Geometry {
             isGroundConductor: it.isGround,
             signalIndex: sig ? signalIdx : undefined,
           });
+          yMax = Math.max(yMax, y1);
           if (sig) {
             signalNames.push(`signal ${signalIdx + 1}`);
             signalIdx++;
@@ -193,7 +200,52 @@ export function computeGeometry(s: Stackup): Geometry {
     });
   }
 
-  return { polys, domainX0: -totW, domainX1: 2 * totW, yTop, totW, signalNames };
+  return { polys, domainX0: -totW, domainX1: 2 * totW, yTop, yMax, totW, signalNames };
+}
+
+/* ---------------- shared viewport ---------------- */
+
+/** inner padding fraction of the SVG viewBox (field canvas aligns to this) */
+export const VIEWPORT_PAD = 0.03;
+
+export interface Viewport {
+  vx0: number;
+  vx1: number;
+  vy0: number;
+  vy1: number;
+  W: number;
+  H: number;
+  sx: (x: number) => number;
+  sy: (y: number) => number;
+}
+
+/**
+ * Focus viewport centered on the conductors, with headroom above the tallest
+ * feature so dimension callouts are never clipped.
+ */
+export function computeViewport(g: Geometry): Viewport {
+  const conductors = g.polys.filter((p) => p.kind === 'conductor');
+  let vx0 = g.domainX0;
+  let vx1 = g.domainX1;
+  if (conductors.length) {
+    const cx0 = Math.min(...conductors.map((p) => p.x0));
+    const cx1 = Math.max(...conductors.map((p) => p.x1));
+    const focus = Math.max((cx1 - cx0) * 1.8, g.yMax * 4);
+    vx0 = Math.max(g.domainX0, (cx0 + cx1) / 2 - focus / 2);
+    vx1 = Math.min(g.domainX1, (cx0 + cx1) / 2 + focus / 2);
+  }
+  const gt = Math.max(g.yTop * 0.04, 0.5);
+  const head = Math.max((g.yMax + gt) * 0.28, gt * 2); // callout headroom
+  const vy0 = -gt * 1.6;
+  const vy1 = g.yMax + head;
+  const w = vx1 - vx0;
+  const h = vy1 - vy0;
+  const W = 640;
+  const H = Math.max(220, Math.min(400, (W * h) / w));
+  const pad = VIEWPORT_PAD;
+  const sx = (x: number) => ((x - vx0) / w) * W * (1 - 2 * pad) + W * pad;
+  const sy = (y: number) => H - (((y - vy0) / h) * H * (1 - 2 * pad) + H * pad);
+  return { vx0, vx1, vy0, vy1, W, H, sx, sy };
 }
 
 /* ---------------- SVG rendering ---------------- */
@@ -206,38 +258,30 @@ function erColor(er: number, map: Map<number, string>): string {
 }
 
 export interface RenderOptions {
-  /** show w/s/t/h dimension callouts (preset mode) */
+  /** show clickable w/s/t/h dimension callouts */
   showDims?: boolean;
+  /** outline-only (for overlaying on the field heatmap) */
+  outline?: boolean;
+  /** dimension label clicked: focus the named form field */
+  onDimClick?: (fieldId: string) => void;
+  /** display unit for callout labels (model values are mils) */
+  displayUnit?: DimUnit;
 }
 
-export function renderCrossSection(svg: SVGSVGElement, s: Stackup, opts: RenderOptions = {}) {
+export function renderCrossSection(
+  svg: SVGSVGElement,
+  s: Stackup,
+  opts: RenderOptions = {},
+): Viewport {
   const g = computeGeometry(s);
-  const pad = 0.06;
-  // focus view: center on conductors with margins, not the whole 3*totW domain
-  const conductors = g.polys.filter((p) => p.kind === 'conductor');
-  let vx0 = g.domainX0;
-  let vx1 = g.domainX1;
-  if (conductors.length) {
-    const cx0 = Math.min(...conductors.map((p) => p.x0));
-    const cx1 = Math.max(...conductors.map((p) => p.x1));
-    const focus = Math.max((cx1 - cx0) * 1.8, g.yTop * 4);
-    vx0 = Math.max(g.domainX0, (cx0 + cx1) / 2 - focus / 2);
-    vx1 = Math.min(g.domainX1, (cx0 + cx1) / 2 + focus / 2);
-  }
-  const gt = Math.max(g.yTop * 0.04, 0.5);
-  const vy0 = -gt * 1.5;
-  const vy1 = g.yTop + gt * 1.5;
-  const w = vx1 - vx0;
-  const h = vy1 - vy0;
-  const W = 640;
-  const H = Math.max(200, Math.min(360, (W * h) / w));
-  const sx = (x: number) => ((x - vx0) / w) * W * (1 - 2 * pad) + W * pad;
-  const sy = (y: number) => H - (((y - vy0) / h) * H * (1 - 2 * pad) + H * pad);
+  const vp = computeViewport(g);
+  const { sx, sy, W, H } = vp;
 
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = '';
   const ns = 'http://www.w3.org/2000/svg';
   const erMap = new Map<number, string>();
+  const outline = !!opts.outline;
 
   const defs = document.createElementNS(ns, 'defs');
   defs.innerHTML = `<pattern id="gndhatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -248,10 +292,10 @@ export function renderCrossSection(svg: SVGSVGElement, s: Stackup, opts: RenderO
   const poly = (pts: Array<[number, number]>, fill: string, stroke: string, title?: string) => {
     const el = document.createElementNS(ns, 'polygon');
     el.setAttribute('points', pts.map(([x, y]) => `${sx(x).toFixed(2)},${sy(y).toFixed(2)}`).join(' '));
-    el.setAttribute('fill', fill);
-    el.setAttribute('stroke', stroke);
-    el.setAttribute('stroke-width', '1');
-    if (title) {
+    el.setAttribute('fill', outline ? 'none' : fill);
+    el.setAttribute('stroke', outline ? 'rgba(30,30,30,0.8)' : stroke);
+    el.setAttribute('stroke-width', outline ? '1.2' : '1');
+    if (title && !outline) {
       const t = document.createElementNS(ns, 'title');
       t.textContent = title;
       el.appendChild(t);
@@ -265,7 +309,7 @@ export function renderCrossSection(svg: SVGSVGElement, s: Stackup, opts: RenderO
     poly(p.pts, erColor(p.er!, erMap), '#b3c2ce', `εr = ${p.er}`);
   }
   for (const p of g.polys.filter((p) => p.kind === 'block')) {
-    poly(p.pts, erColor(p.er!, erMap), '#9fb2c0', `dielectric block εr = ${p.er}`);
+    poly(p.pts, erColor(p.er!, erMap), '#9fb2c0', `cover/block εr = ${p.er}`);
   }
   for (const p of g.polys.filter((p) => p.kind === 'ground')) {
     poly(p.pts, 'url(#gndhatch)', '#5c6b7e', 'ground plane');
@@ -279,19 +323,26 @@ export function renderCrossSection(svg: SVGSVGElement, s: Stackup, opts: RenderO
     );
   }
 
-  // dimension callouts
-  if (opts.showDims && conductors.length) {
+  // dimension callouts (clickable)
+  const conductors = g.polys.filter((p) => p.kind === 'conductor');
+  if (opts.showDims && !outline && conductors.length) {
     const sigs = conductors.filter((c) => !c.isGroundConductor);
-    const text = (x: number, y: number, str: string, anchor = 'middle') => {
+    const text = (x: number, y: number, str: string, fieldId?: string, anchor = 'middle') => {
       const t = document.createElementNS(ns, 'text');
       t.setAttribute('x', String(x));
       t.setAttribute('y', String(y));
       t.setAttribute('text-anchor', anchor);
-      t.setAttribute('class', 'cs-dim');
+      t.setAttribute('class', fieldId ? 'cs-dim cs-dim-click' : 'cs-dim');
       t.textContent = str;
+      if (fieldId && opts.onDimClick) {
+        t.addEventListener('click', () => opts.onDimClick!(fieldId));
+        const tt = document.createElementNS(ns, 'title');
+        tt.textContent = 'click to edit';
+        t.appendChild(tt);
+      }
       svg.appendChild(t);
     };
-    const arrow = (x0: number, y0: number, x1: number, y1: number) => {
+    const line = (x0: number, y0: number, x1: number, y1: number) => {
       const l = document.createElementNS(ns, 'line');
       l.setAttribute('x1', String(x0));
       l.setAttribute('y1', String(y0));
@@ -300,22 +351,32 @@ export function renderCrossSection(svg: SVGSVGElement, s: Stackup, opts: RenderO
       l.setAttribute('class', 'cs-dimline');
       svg.appendChild(l);
     };
+    const unit = opts.displayUnit ?? 'mils';
+    const unitLabel = unit === 'um' ? 'µm' : unit === 'inch' ? 'in' : unit;
+    const fmt = (v: number) => formatDim(v, unit);
+
     const c0 = sigs[0] ?? conductors[0];
-    // w
-    arrow(sx(c0.x0), sy(c0.y1) - 6, sx(c0.x1), sy(c0.y1) - 6);
-    text((sx(c0.x0) + sx(c0.x1)) / 2, sy(c0.y1) - 10, `w = ${(c0.x1 - c0.x0).toPrecision(3)} ${s.units}`);
+    // w: above the first signal trace (headroom guaranteed by computeViewport)
+    const yW = sy(c0.y1) - 8;
+    line(sx(c0.x0), yW, sx(c0.x1), yW);
+    text((sx(c0.x0) + sx(c0.x1)) / 2, yW - 4, `w = ${fmt(c0.x1 - c0.x0)} ${unitLabel}`, 'pf-w');
     // s (gap) for 2 signals
     if (sigs.length >= 2) {
-      const gap = sigs[1].x0 - sigs[0].x1;
-      arrow(sx(sigs[0].x1), sy(c0.y1) - 6, sx(sigs[1].x0), sy(c0.y1) - 6);
-      text((sx(sigs[0].x1) + sx(sigs[1].x0)) / 2, sy(c0.y1) - 10, `s = ${gap.toPrecision(3)}`);
+      const yS = sy(sigs[0].y1) - 8;
+      line(sx(sigs[0].x1), yS, sx(sigs[1].x0), yS);
+      text((sx(sigs[0].x1) + sx(sigs[1].x0)) / 2, yS - 4, `s = ${fmt(sigs[1].x0 - sigs[0].x1)}`, 'pf-s');
     }
+    // t: right of the first trace
+    const xT = sx(c0.x1) + 8;
+    line(xT, sy(c0.y0), xT, sy(c0.y1));
+    text(xT + 4, (sy(c0.y0) + sy(c0.y1)) / 2 + 4, `t = ${fmt(c0.y1 - c0.y0)}`, 'pf-t', 'start');
     // h (first layer below conductors)
     const firstLayer = g.polys.find((p) => p.kind === 'layer');
     if (firstLayer) {
-      const lx = sx(vx1) - 14;
-      arrow(lx, sy(firstLayer.y0), lx, sy(firstLayer.y1));
-      text(lx - 4, (sy(firstLayer.y0) + sy(firstLayer.y1)) / 2 + 4, `h = ${(firstLayer.y1 - firstLayer.y0).toPrecision(3)}`, 'end');
+      const lx = sx(vp.vx1) - 12;
+      line(lx, sy(firstLayer.y0), lx, sy(firstLayer.y1));
+      text(lx - 4, (sy(firstLayer.y0) + sy(firstLayer.y1)) / 2 + 4, `h = ${fmt(firstLayer.y1 - firstLayer.y0)}`, 'pf-h', 'end');
     }
   }
+  return vp;
 }

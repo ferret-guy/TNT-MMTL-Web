@@ -20,6 +20,7 @@
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.0.0",
     "@popperjs/core": "^2.11.8",
-    "bootstrap": "^5.3.3"
+    "bootstrap": "^5.3.3",
+    "plotly.js-dist-min": "^3.7.0"
   }
 }

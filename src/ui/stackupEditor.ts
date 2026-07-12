@@ -4,12 +4,12 @@
  */
 import type {
   ConductorItem,
-  Stackup,
   StackupItem,
 } from '../model/types.ts';
 import { isConductor, signalCount } from '../model/types.ts';
 import { validateStackup } from '../xsctn/generate.ts';
 import { store } from '../model/store.ts';
+import { bindDimFields, dimFieldHtml, retargetDimFields, type DimUnit } from './dimField.ts';
 
 let uid = 1;
 const newId = () => `it${Date.now().toString(36)}${uid++}`;
@@ -56,52 +56,59 @@ const KIND_LABEL: Record<StackupItem['kind'], string> = {
   CircleConductors: 'Circle conductors',
 };
 
-function fieldsFor(item: StackupItem): Array<{ key: string; label: string }> {
+interface FieldSpec {
+  key: string;
+  label: string;
+  /** dimension fields get unit handling; plain fields are bare numbers */
+  dim?: boolean;
+}
+
+function fieldsFor(item: StackupItem): FieldSpec[] {
   switch (item.kind) {
     case 'GroundPlane':
       return [];
     case 'DielectricLayer':
       return [
-        { key: 'thickness', label: 'thickness' },
-        { key: 'permittivity', label: 'εr' },
-        { key: 'lossTangent', label: 'tan δ' },
+        { key: 'thickness', label: 'Thickness', dim: true },
+        { key: 'permittivity', label: 'Permittivity εr' },
+        { key: 'lossTangent', label: 'Loss Tangent' },
       ];
     case 'RectangleDielectric':
       return [
-        { key: 'width', label: 'width' },
-        { key: 'height', label: 'height' },
-        { key: 'permittivity', label: 'εr' },
-        { key: 'xOffset', label: 'x offset' },
+        { key: 'width', label: 'Width', dim: true },
+        { key: 'height', label: 'Height', dim: true },
+        { key: 'permittivity', label: 'Permittivity εr' },
+        { key: 'xOffset', label: 'X Offset', dim: true },
       ];
     case 'RectangleConductors':
       return [
-        { key: 'width', label: 'width' },
-        { key: 'height', label: 'height' },
-        { key: 'number', label: 'count' },
-        { key: 'pitch', label: 'pitch' },
-        { key: 'xOffset', label: 'x offset' },
-        { key: 'yOffset', label: 'y offset' },
-        { key: 'conductivity', label: 'σ (S/m)' },
+        { key: 'width', label: 'Width', dim: true },
+        { key: 'height', label: 'Height', dim: true },
+        { key: 'number', label: 'Count' },
+        { key: 'pitch', label: 'Pitch', dim: true },
+        { key: 'xOffset', label: 'X Offset', dim: true },
+        { key: 'yOffset', label: 'Y Offset', dim: true },
+        { key: 'conductivity', label: 'Conductivity (S/m)' },
       ];
     case 'TrapezoidConductors':
       return [
-        { key: 'bottomWidth', label: 'bottom w' },
-        { key: 'topWidth', label: 'top w' },
-        { key: 'height', label: 'height' },
-        { key: 'number', label: 'count' },
-        { key: 'pitch', label: 'pitch' },
-        { key: 'xOffset', label: 'x offset' },
-        { key: 'yOffset', label: 'y offset' },
-        { key: 'conductivity', label: 'σ (S/m)' },
+        { key: 'bottomWidth', label: 'Bottom Width', dim: true },
+        { key: 'topWidth', label: 'Top Width', dim: true },
+        { key: 'height', label: 'Height', dim: true },
+        { key: 'number', label: 'Count' },
+        { key: 'pitch', label: 'Pitch', dim: true },
+        { key: 'xOffset', label: 'X Offset', dim: true },
+        { key: 'yOffset', label: 'Y Offset', dim: true },
+        { key: 'conductivity', label: 'Conductivity (S/m)' },
       ];
     case 'CircleConductors':
       return [
-        { key: 'diameter', label: 'diameter' },
-        { key: 'number', label: 'count' },
-        { key: 'pitch', label: 'pitch' },
-        { key: 'xOffset', label: 'x offset' },
-        { key: 'yOffset', label: 'y offset' },
-        { key: 'conductivity', label: 'σ (S/m)' },
+        { key: 'diameter', label: 'Diameter', dim: true },
+        { key: 'number', label: 'Count' },
+        { key: 'pitch', label: 'Pitch', dim: true },
+        { key: 'xOffset', label: 'X Offset', dim: true },
+        { key: 'yOffset', label: 'Y Offset', dim: true },
+        { key: 'conductivity', label: 'Conductivity (S/m)' },
       ];
   }
 }
@@ -109,20 +116,31 @@ function fieldsFor(item: StackupItem): Array<{ key: string; label: string }> {
 export function renderStackupEditor(container: HTMLElement) {
   const s = store.get();
   const st = s.freeform;
+  const unit = s.displayUnit as DimUnit;
   const errors = validateStackup(st);
   const nSignals = signalCount(st);
 
   const itemCard = (item: StackupItem, i: number): string => {
     const fields = fieldsFor(item)
-      .map(
-        (f) => `
+      .map((f) => {
+        const value = (item as unknown as Record<string, number>)[f.key];
+        if (f.dim) {
+          return dimFieldHtml({
+            id: `sk-${i}-${f.key}`,
+            label: f.label,
+            mils: value,
+            unit,
+            colClass: 'col-4 col-xl-3',
+          });
+        }
+        return `
         <div class="col-4 col-xl-3">
           <label class="form-label mb-0 tiny">${f.label}</label>
           <input type="number" step="any" class="form-control form-control-sm sk-field"
                  data-idx="${i}" data-key="${f.key}"
-                 value="${(item as unknown as Record<string, number>)[f.key]}">
-        </div>`,
-      )
+                 value="${value}">
+        </div>`;
+      })
       .join('');
     const groundToggle = isConductor(item)
       ? `<div class="form-check form-check-inline ms-2 mb-0">
@@ -157,8 +175,8 @@ export function renderStackupEditor(container: HTMLElement) {
           ${TEMPLATES.map((t, i) => `<li><a class="dropdown-item sk-add" data-tpl="${i}" href="#">${t.label}</a></li>`).join('')}
         </ul>
       </div>
-      <select class="form-select form-select-sm w-auto" id="sk-units">
-        ${['mils', 'microns', 'inches', 'meters'].map((u) => `<option ${u === st.units ? 'selected' : ''}>${u}</option>`).join('')}
+      <select class="form-select form-select-sm w-auto" id="sk-units" title="display units (each field's unit button also cycles; typing 1mm / 35um converts)">
+        ${(['mils', 'mm', 'um', 'inch'] as DimUnit[]).map((u) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u === 'um' ? 'µm' : u === 'inch' ? 'in' : u}</option>`).join('')}
       </select>
       <span class="badge text-bg-${nSignals === 0 ? 'danger' : 'primary'}">${nSignals} signal conductor${nSignals === 1 ? '' : 's'}</span>
       ${nSignals === 2 ? '<span class="badge text-bg-success">odd/even &amp; Zdiff available</span>' : ''}
@@ -223,6 +241,17 @@ export function renderStackupEditor(container: HTMLElement) {
       setItems(items);
     }),
   );
+  // dimension fields: id pattern sk-<itemIdx>-<key>, canonical mils
+  bindDimFields(container, {
+    onChange: (id, mils) => {
+      const m = id.match(/^sk-(\d+)-(.+)$/);
+      if (!m) return;
+      const items = [...store.get().freeform.items];
+      const i = parseInt(m[1], 10);
+      items[i] = { ...items[i], [m[2]]: mils } as StackupItem;
+      setItems(items);
+    },
+  });
   container.querySelectorAll<HTMLInputElement>('.sk-ground').forEach((inp) =>
     inp.addEventListener('change', () => {
       const items = [...store.get().freeform.items];
@@ -231,11 +260,11 @@ export function renderStackupEditor(container: HTMLElement) {
       setItems(items);
     }),
   );
-  (container.querySelector('#sk-units') as HTMLSelectElement).addEventListener('change', (e) =>
-    store.update({
-      freeform: { ...store.get().freeform, units: (e.target as HTMLSelectElement).value as Stackup['units'] },
-    }),
-  );
+  (container.querySelector('#sk-units') as HTMLSelectElement).addEventListener('change', (e) => {
+    const u = (e.target as HTMLSelectElement).value as DimUnit;
+    store.update({ displayUnit: u });
+    retargetDimFields(container, u);
+  });
   (container.querySelector('#sk-cseg') as HTMLInputElement).addEventListener('change', (e) =>
     store.update({
       freeform: { ...store.get().freeform, cseg: Math.min(Math.max(parseInt((e.target as HTMLInputElement).value, 10) || 10, 4), 100) },
