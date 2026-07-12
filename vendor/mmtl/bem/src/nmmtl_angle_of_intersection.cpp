@@ -93,19 +93,21 @@
 
 float nmmtl_angle_of_intersection(float x1, float y1, float x2, float y2)
 {
-  float angle;
-  float length1,length2;
-  
-  length1 = sqrt(x1*x1 + y1*y1);
-  length2 = sqrt(x2*x2 + y2*y2);
-  
-  /* determine angle by doing dot product */
-  
-  angle = acos( (x1*x2 + y1*y2)/(length1*length2) );
-  
-  /* determine sign by doing cross product */
-  
-  if((x1*y2 - x2*y1) < 0) angle *= -1.0;
-  
-  return(angle);
+  /* tnt-web patch: originally acos(dot/(len1*len2)) with the sign taken
+     from the cross product.  Near anti-parallel vectors the acos form is
+     ill-conditioned and its last-ulp value depends on the platform's libm
+     and float/double overload resolution; callers guard the straight-line
+     case with exact comparisons against PI (see nmmtl_det_intersections),
+     so a one-ulp difference flips dielectric bookkeeping (observed as
+     wrong epsilon on uncovered trapezoid corners under WebAssembly).
+
+     atan2(cross, dot) is algebraically identical, better conditioned, and
+     returns exactly +/-pi for anti-parallel vectors on every IEEE libm,
+     which the callers' "< PI" guards then exclude deterministically
+     (float(pi) = 3.14159274 > double PI). */
+
+  double dot   = (double)x1 * (double)x2 + (double)y1 * (double)y2;
+  double cross = (double)x1 * (double)y2 - (double)x2 * (double)y1;
+
+  return((float)atan2(cross, dot));
 }

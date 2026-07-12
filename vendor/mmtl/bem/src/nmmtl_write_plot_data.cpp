@@ -112,6 +112,9 @@ void nmmtl_write_plot_data(
 	    {
 	      fprintf(outputFile,"Edge: 1 %e\n",cel->edge[1]->nu);
 	    }
+	  /* tnt-web addition: expose the contacting dielectric constant so the
+	     web field renderer (and geometry debugging) can see it */
+	  fprintf(outputFile,"Epsilon: %e\n",cel->epsilon);
 	  fprintf(outputFile,"Charge Values:");
 	  for (i = 0; i < INTERP_PTS; i++)
 	    fprintf(outputFile," %e",sigma_vector[cel->node[i]]);
@@ -140,6 +143,9 @@ void nmmtl_write_plot_data(
       for (i = 0; i < INTERP_PTS; i++)
 	fprintf(outputFile," %e",sigma_vector[die->node[i]]);
       fprintf(outputFile,"\n");
+
+      /* tnt-web addition: interface dielectric constants (normal side +) */
+      fprintf(outputFile,"EpsilonPM: %e %e\n",die->epsilonplus,die->epsilonminus);
 
       fprintf(outputFile,"\n");
 

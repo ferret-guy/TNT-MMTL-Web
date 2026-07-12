@@ -278,9 +278,24 @@ int nmmtl_evaluate_conductors(struct dielectric *dielectrics,
   
   status = nmmtl_orphans(conductor_cs,conductor_ls,dielectrics,
 			 air_starts,dielectric_segments);
-  
+
   if(status != SUCCESS) return(status);
-  
+
+#ifdef TNTWEB_GEOM_TRACE
+  {
+    LINE_SEGMENTS_P ls;
+    DIELECTRIC_SEGMENTS_P ds;
+    for(ls = *conductor_ls; ls != NULL; ls = ls->next)
+      fprintf(stderr,"LS c=%d (%.17g,%.17g)-(%.17g,%.17g) eps=[%.17g,%.17g] nu=[%.17g,%.17g] th2=[%.17g,%.17g] int=%d div=%d\n",
+              ls->conductor,ls->startx,ls->starty,ls->endx,ls->endy,
+              ls->epsilon[0],ls->epsilon[1],ls->nu[0],ls->nu[1],
+              ls->theta2[0],ls->theta2[1],ls->interior,ls->divisions);
+    for(ds = *dielectric_segments; ds != NULL; ds = ds->next)
+      fprintf(stderr,"DS at=%.17g (%.17g..%.17g) eps+=%g eps-=%g eic=%d ori=%d div=%d\n",
+              ds->at,ds->start,ds->end,ds->epsilonplus,ds->epsilonminus,
+              (int)ds->end_in_conductor,(int)ds->orientation,ds->divisions);
+  }
+#endif
 #ifdef NMMTL_DUMP_DIAG
   status = nmmtl_dump_segments(*dielectric_segments,*conductor_ls,
 			       *conductor_cs);

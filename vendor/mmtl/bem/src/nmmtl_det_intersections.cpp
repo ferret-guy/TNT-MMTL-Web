@@ -691,7 +691,15 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	    Now we handle the different type of overlap situations we
 	    could encounter.  If you have a better way, let me know.
 	    */
-	  
+
+#ifdef TNTWEB_GEOM_TRACE
+	  fprintf(stderr,"CL it=%#x cl=%ld ci=%d di=%d int=%d i1=(%.17g,%.17g) i2=(%.17g,%.17g) cseg=(%.17g,%.17g)-(%.17g,%.17g) dseg=(%.17g,%.17g)-(%.17g,%.17g) eps+=%g eps-=%g\n",
+	          it,(long)cl,(int)cond_inc_dir,(int)die_inc_dir,segment->interior,
+	          intersection1.x,intersection1.y,intersection2.x,intersection2.y,
+	          cseg.x[0],cseg.y[0],cseg.x[1],cseg.y[1],
+	          dseg.x[0],dseg.y[0],dseg.x[1],dseg.y[1],
+	          dieseg->epsilonplus,dieseg->epsilonminus);
+#endif
 	  switch(cl)
 	  {
 	    

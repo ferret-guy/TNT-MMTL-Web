@@ -1238,11 +1238,17 @@ int nmmtl_seg_seg_inter(LINESEG_P segment1,
     sets of numbers, so one would hope they are exact.
     */
 
+#ifdef TNTWEB_GEOM_TRACE
+  fprintf(stderr,"SSI s1=(%.17g,%.17g)-(%.17g,%.17g) s2=(%.17g,%.17g)-(%.17g,%.17g) sl1=%.17g sl2=%.17g ic1=%.17g ic2=%.17g\n",
+          segment1->x[0],segment1->y[0],segment1->x[1],segment1->y[1],
+          segment2->x[0],segment2->y[0],segment2->x[1],segment2->y[1],
+          slope1,slope2,intercept1,intercept2);
+#endif
   if(slope1 == slope2)
   {
 
     /* they are parallel */
-    
+
     if(intercept1 == intercept2)
     {
       /* they are colinear, find region of overlap if there is one */

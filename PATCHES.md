@@ -27,5 +27,35 @@ Every deviation from pristine upstream is logged here.
    int-returning function and ignoring the result is valid everywhere, so the
    `int` declarations are correct for gfortran builds too.
 
+## vendor/mmtl/bem/src/nmmtl_angle_of_intersection.cpp
+
+4. **Angle computation rewritten from `acos(dot/(|a||b|))` to `atan2(cross, dot)`.**
+   The acos form is ill-conditioned near anti-parallel vectors, and callers
+   (`nmmtl_det_intersections.cpp`) guard the straight-through case with exact
+   `turn_angle < PI` comparisons. glibc and Emscripten's libm/overload
+   resolution differ by an ulp there, so under WebAssembly an uncovered
+   trapezoid's bottom corner "turn" came out just under π, stealing the
+   air-side epsilon for the conductor's bottom face (Z₀ 82 Ω instead of 52 Ω,
+   εeff ~1.2 instead of ~3.0). `atan2(cross, dot)` returns exactly ±π for
+   anti-parallel vectors on every IEEE libm, so the guards exclude the case
+   deterministically. Verified: native gfortran, native f2c, and wasm builds
+   agree to every printed digit on uncovered rectangle and trapezoid cases,
+   and all golden gates still pass.
+
+## vendor/mmtl/bem/src/nmmtl_write_plot_data.cpp
+
+5. **Field-plot file additions**: each conductor element also prints
+   `Epsilon: <e>` and each dielectric element `EpsilonPM: <e+> <e->`.
+   Used by the web field renderer and for geometry debugging; TNT's original
+   post-processor is not part of this project, and the harness parsers skip
+   unknown lines.
+
+## Debug instrumentation (inactive unless -DTNTWEB_GEOM_TRACE)
+
+`nmmtl_intersections.cpp`, `nmmtl_det_intersections.cpp`, and
+`nmmtl_eval_conductors.cpp` carry `#ifdef TNTWEB_GEOM_TRACE` stderr dumps of
+segment/intersection state used to bisect native-vs-wasm divergences
+(see build/repro/trace*.sh). Not compiled into production builds.
+
 No other source file is modified. FORTRAN `.F` files are consumed as-is
 (translated by `f2c -R` at build time; see `toolchain/`).

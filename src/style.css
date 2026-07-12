@@ -1,0 +1,36 @@
+/* Bootstrap is imported in main.ts; this file only sets the typeface and
+   a few chart/diagram styles. */
+
+:root,
+[data-bs-theme] {
+  --bs-body-font-family: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.tiny {
+  font-size: 0.72rem;
+}
+
+/* cross-section dimension callouts */
+.cs-dim {
+  font-size: 11px;
+  fill: var(--bs-body-color);
+}
+.cs-dimline {
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1;
+  marker-start: none;
+}
+
+/* charts */
+.chart-grid {
+  stroke: var(--bs-border-color);
+  stroke-width: 1;
+}
+.chart-tick,
+.chart-axis {
+  font-size: 11px;
+  fill: var(--bs-secondary-color);
+}
+.chart-axis {
+  font-size: 12px;
+}

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TNT-Web — PCB Trace Impedance Simulator</title>
+    <meta name="description" content="Design single-ended and differential PCB traces and simulate them in your browser with the MMTL/TNT boundary-element field solver (WebAssembly)." />
+  </head>
+  <body>
+    <nav class="navbar navbar-expand bg-body-tertiary border-bottom mb-3">
+      <div class="container-fluid">
+        <span class="navbar-brand fw-bold">TNT-Web</span>
+        <span class="navbar-text small d-none d-md-inline">
+          PCB trace impedance — MMTL boundary-element field solver in WebAssembly
+        </span>
+        <span class="ms-auto small text-body-secondary" id="solver-status">solver: loading…</span>
+      </div>
+    </nav>
+
+    <main class="container-fluid px-3">
+      <div class="row g-3">
+        <!-- inputs -->
+        <div class="col-lg-5 col-xxl-4">
+          <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-preset" type="button" role="tab">Presets</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-freeform" type="button" role="tab">Free-form stackup</button></li>
+          </ul>
+          <div class="tab-content border border-top-0 rounded-bottom p-3 bg-body">
+            <div class="tab-pane fade show active" id="tab-preset" role="tabpanel"></div>
+            <div class="tab-pane fade" id="tab-freeform" role="tabpanel"></div>
+          </div>
+
+          <div class="d-flex gap-2 mt-3 align-items-center">
+            <button class="btn btn-primary" id="btn-solve">
+              <span class="spinner-border spinner-border-sm d-none" id="solve-spinner"></span>
+              Solve
+            </button>
+            <button class="btn btn-outline-danger d-none" id="btn-cancel">Cancel</button>
+            <span class="small text-body-secondary" id="solve-note"></span>
+          </div>
+        </div>
+
+        <!-- outputs -->
+        <div class="col-lg-7 col-xxl-8">
+          <div class="card mb-3">
+            <div class="card-header py-2 d-flex align-items-center">
+              <span>Cross-section</span>
+              <span class="ms-auto small text-body-secondary" id="cs-note"></span>
+            </div>
+            <div class="card-body p-2">
+              <svg id="cross-section" width="100%" role="img" aria-label="stackup cross-section"></svg>
+            </div>
+          </div>
+
+          <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-results" type="button" role="tab">Results</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-loss" type="button" role="tab">Loss vs frequency</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-field" type="button" role="tab">Field plot</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-log" type="button" role="tab">Log</button></li>
+          </ul>
+          <div class="tab-content border border-top-0 rounded-bottom p-3 bg-body">
+            <div class="tab-pane fade show active" id="tab-results" role="tabpanel"></div>
+
+            <div class="tab-pane fade" id="tab-loss" role="tabpanel">
+              <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
+                <div>
+                  <label class="form-label mb-0 small">Roughness model</label>
+                  <select class="form-select form-select-sm" id="loss-model" style="max-width:12rem">
+                    <option value="none">none (smooth)</option>
+                    <option value="hammerstad" selected>Hammerstad–Jensen</option>
+                    <option value="huray">Huray (cannonball)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label mb-0 small">Rq (µm RMS)</label>
+                  <input type="number" step="0.1" class="form-control form-control-sm" id="loss-rq" value="1.0" style="max-width:6rem">
+                </div>
+                <div>
+                  <label class="form-label mb-0 small">Units</label>
+                  <select class="form-select form-select-sm" id="loss-unit" style="max-width:8rem">
+                    <option selected>dB/m</option><option>dB/cm</option><option>dB/inch</option>
+                  </select>
+                </div>
+                <span class="small text-body-secondary ms-auto" id="loss-note"></span>
+              </div>
+              <svg id="loss-chart" width="100%" role="img" aria-label="loss vs frequency"></svg>
+              <p class="small text-body-secondary mb-0 mt-1">
+                Analytic post-processing (W-element style): R(f) = √(R<sub>dc</sub>² + (K·R<sub>s</sub>√f)²) with the
+                selected roughness correction K(f); G(f) = 2πf·C·tanδ. The field solve itself is quasi-static —
+                the solver has no frequency, roughness, or dielectric-loss dependence.
+              </p>
+            </div>
+
+            <div class="tab-pane fade" id="tab-field" role="tabpanel">
+              <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
+                <div>
+                  <label class="form-label mb-0 small">Driven line</label>
+                  <select class="form-select form-select-sm" id="field-line" style="min-width:9rem"></select>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" id="field-compute">Compute field</button>
+                <span class="small text-body-secondary" id="field-note"></span>
+              </div>
+              <div class="position-relative">
+                <canvas id="field-canvas" class="w-100 border rounded" style="image-rendering:auto"></canvas>
+                <svg id="field-overlay" class="position-absolute top-0 start-0 w-100 h-100" style="pointer-events:none"></svg>
+              </div>
+              <div class="d-flex align-items-center gap-2 mt-1 small text-body-secondary">
+                <span>0 V</span><canvas id="field-colorbar" style="height:12px"></canvas><span>1 V (driven)</span>
+                <span class="ms-auto" id="field-residual"></span>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tab-log" role="tabpanel">
+              <h6 class="mb-1">Solver stdout</h6>
+              <pre class="small bg-body-tertiary p-2 rounded" id="log-stdout" style="max-height:14rem;overflow:auto">—</pre>
+              <h6 class="mb-1">.result file</h6>
+              <pre class="small bg-body-tertiary p-2 rounded" id="log-result" style="max-height:22rem;overflow:auto">—</pre>
+            </div>
+          </div>
+
+          <p class="small text-body-secondary mt-3">
+            Field solver: <a href="https://mmtl.sourceforge.net/" rel="noopener">MMTL / TNT</a> (Mayo SPPDG,
+            GPL) 2-D boundary-element method, compiled to WebAssembly. Everything runs locally in your
+            browser — no data leaves this page.
+          </p>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
