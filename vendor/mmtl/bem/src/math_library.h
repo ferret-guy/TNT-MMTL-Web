@@ -222,9 +222,9 @@ extern "C" void dlu_solve_linear(int *n, double *a, double *x, double *b,
 
 /* Declarations of NSWC routines */
 
-extern "C" void FFT(COMPLEX *c, int *n, int *sign, int *ierr);
+extern "C" int FFT(COMPLEX *c, int *n, int *sign, int *ierr);
 
-extern "C" void CEIGV(int *bal,
+extern "C" int CEIGV(int *bal,
 		 float *c_calc_eigenvalues_ar,float *c_calc_eigenvalues_ai,
 		 int *n1, int *n2,
 		 float *c_calc_eigenvalues_wr,float *c_calc_eigenvalues_wi,
@@ -232,13 +232,13 @@ extern "C" void CEIGV(int *bal,
 		 int *ierr,
 		 float *c_calc_eigenvalues_temp);
 
-extern "C"  void CMTMS(int *ra, int *carb, int *cb, COMPLEX *a, int *lda,
+extern "C" int CMTMS(int *ra, int *carb, int *cb, COMPLEX *a, int *lda,
 			   COMPLEX *b, int *ldb, COMPLEX *c, int *ldc);
 
-extern "C"  void MTMS(int *ra,int *carb,int *cb,float *a,int *lda,
+extern "C" int MTMS(int *ra,int *carb,int *cb,float *a,int *lda,
 			  float *b,int *ldb,float *c,int *ldc);
 
-extern "C"  void CMSLV1(int *calc_inv,int *n,int *zero_dim1,
+extern "C" int CMSLV1(int *calc_inv,int *n,int *zero_dim1,
 			    COMPLEX *c_solve_linear_a, int *lda,
 			    COMPLEX *c_solve_linear_b, 
 			    int *n2,
@@ -246,17 +246,17 @@ extern "C"  void CMSLV1(int *calc_inv,int *n,int *zero_dim1,
 			    int *c_invert_matrix_ipvt,
 			    COMPLEX *c_invert_matrix_wrk);
 
-extern "C"  void MSLV(int *calc_inv,int *n,int *zero_dim1,
+extern "C" int MSLV(int *calc_inv,int *n,int *zero_dim1,
 			  float *b,int *ldb,int *dum,int *zero_dim2,
 			  float *t1, float *rcond,int *ierr,
 			  int *invert_matrix_ipvt,float *invert_matrix_wrk);
 
-extern "C"  void DMSLV(int *calc_inv,int *n,int *zero_dim1,
+extern "C" int DMSLV(int *calc_inv,int *n,int *zero_dim1,
 			  double *b,int *ldb,int *dum,int *zero_dim2,
 			  double *t1, double *rcond,int *ierr,
 			  int *invert_matrix_ipvt,double *invert_matrix_wrk);
 
-extern "C"  void DCMSLV(int *calc_inv,
+extern "C" int DCMSLV(int *calc_inv,
                    int *n1,
 			    int *one_dim,
 			    double *d_c_solve_linear_ar,
@@ -269,16 +269,16 @@ extern "C"  void DCMSLV(int *calc_inv,
 			    int *d_c_solve_linear_ipvt,
 			    double *d_c_solve_linear_wrk);
 
-extern "C" void SGEFA(float *lu, int *lda, int *n, int *ipvt, int *info);
+extern "C" int SGEFA(float *lu, int *lda, int *n, int *ipvt, int *info);
 
-extern "C" void SGECO(float *lu, int *lda, int *n, int *ipvt, float *rcond, 
+extern "C" int SGECO(float *lu, int *lda, int *n, int *ipvt, float *rcond, 
                  int *info);
 
-extern "C" void SGESL(float *a, int *lda, int *n, int *ipvt, float *x, int *job);
+extern "C" int SGESL(float *a, int *lda, int *n, int *ipvt, float *x, int *job);
 
-extern "C" void DGEFA(double *lu, int *lda, int *n, int *ipvt, int *info);
+extern "C" int DGEFA(double *lu, int *lda, int *n, int *ipvt, int *info);
 
-extern "C" void DGESL(double *a, int *lda, int *n, int *ipvt, double *x, int *job);
+extern "C" int DGESL(double *a, int *lda, int *n, int *ipvt, double *x, int *job);
 
 
 #endif

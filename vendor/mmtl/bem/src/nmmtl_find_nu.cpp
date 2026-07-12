@@ -61,7 +61,7 @@ static float THETA_TERM;   /* constant in nu equation 2*theta1 - theta2 */
  **  FUNCTION DECLARATIONS
  *******************************************************************
  */
-extern "C" void FMIN(float (*nmmtl_nu_function)(float *), float *a,
+extern "C" int FMIN(float (*nmmtl_nu_function)(float *), float *a,
 	float *b, float *x, float *w, float *aerr, float *rerr,
 	float *error, int *ind);
 /*
