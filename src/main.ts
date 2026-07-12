@@ -19,7 +19,14 @@ import {
   VIEWPORT_PAD,
   type Viewport,
 } from './ui/crossSection.ts';
-import { contourPaths, drawColorbar, drawFieldHeatmap, renderContoursInto } from './ui/fieldView.ts';
+import {
+  contourPaths,
+  drawColorbar,
+  drawFieldHeatmap,
+  renderContoursInto,
+  renderStreamlinesInto,
+  streamlinePaths,
+} from './ui/fieldView.ts';
 import { renderLossPlot } from './ui/lossPlot.ts';
 import { computeLineStats } from './analysis/lineStats.ts';
 import { lossCurve, lossInputsFrom, UNIT_SCALE } from './analysis/losses.ts';
@@ -169,9 +176,14 @@ function renderCS() {
     csCanvas.style.top = `${padPct}%`;
     csCanvas.style.width = `${100 - 2 * padPct}%`;
     csCanvas.style.height = `${100 - 2 * padPct}%`;
-    if (viewMode === 'field') drawFieldHeatmap(csCanvas, fieldGridCache);
-    const paths = contourPaths(fieldGridCache, vp, MILS_PER_METER, viewMode === 'lines' ? 16 : 12);
-    renderContoursInto(csSvg, paths, viewMode === 'lines');
+    if (viewMode === 'field') {
+      drawFieldHeatmap(csCanvas, fieldGridCache);
+      renderContoursInto(csSvg, contourPaths(fieldGridCache, vp, MILS_PER_METER, 12), false);
+    } else {
+      // E-field lines: perpendicular to the equipotentials, running from the
+      // driven trace to ground / the other conductor
+      renderStreamlinesInto(csSvg, streamlinePaths(fieldGridCache, vp, MILS_PER_METER, 34));
+    }
     drawColorbar($('#field-colorbar') as HTMLCanvasElement);
     const pct = (fieldGridCache.maxResidual * 100).toFixed(1);
     fieldResidual.textContent = Number.isFinite(fieldGridCache.maxResidual)

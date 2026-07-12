@@ -120,6 +120,128 @@ export function renderContoursInto(
   }
 }
 
+/**
+ * E-field streamlines: start just off the driven conductor (seeded along the
+ * phi = seedLevel equipotential), integrate along E = -grad(phi) — i.e.
+ * perpendicular to the equipotentials — until the line lands on ground
+ * (phi -> 0), another conductor (masked cell), or leaves the view.
+ */
+export function streamlinePaths(
+  grid: FieldGrid,
+  vp: Viewport,
+  scaleMilsPerMeter: number,
+  nSeeds = 32,
+): string[] {
+  const { nx, ny, phi } = grid;
+  const lo = grid.phiMin;
+  const span = grid.phiMax - grid.phiMin || 1;
+  const norm = (v: number) => (v - lo) / span;
+
+  /** bilinear phi in grid coords; NaN if any corner is masked */
+  const sample = (x: number, y: number): number => {
+    const i = Math.floor(x);
+    const j = Math.floor(y);
+    if (i < 0 || j < 0 || i >= nx - 1 || j >= ny - 1) return NaN;
+    const fx = x - i;
+    const fy = y - j;
+    const v00 = phi[j * nx + i];
+    const v10 = phi[j * nx + i + 1];
+    const v01 = phi[(j + 1) * nx + i];
+    const v11 = phi[(j + 1) * nx + i + 1];
+    return v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
+  };
+  const grad = (x: number, y: number): [number, number] => {
+    const e = 0.6;
+    return [(sample(x + e, y) - sample(x - e, y)) / (2 * e), (sample(x, y + e) - sample(x, y - e)) / (2 * e)];
+  };
+
+  // seeds: midpoints of the phi = seedLevel contour cells (a ring hugging the
+  // driven line), ordered by angle around the ring so the chosen subset is
+  // spread evenly all the way around (top, sides AND bottom face)
+  const seedLevel = lo + span * 0.9;
+  const seeds: Array<[number, number]> = [];
+  for (let j = 0; j < ny - 1; j++) {
+    for (let i = 0; i < nx - 1; i++) {
+      const v00 = phi[j * nx + i];
+      const v10 = phi[j * nx + i + 1];
+      const v01 = phi[(j + 1) * nx + i];
+      const v11 = phi[(j + 1) * nx + i + 1];
+      if ([v00, v10, v01, v11].some(Number.isNaN)) continue;
+      const min = Math.min(v00, v10, v01, v11);
+      const max = Math.max(v00, v10, v01, v11);
+      if (min < seedLevel && max >= seedLevel) seeds.push([i + 0.5, j + 0.5]);
+    }
+  }
+  if (!seeds.length) return [];
+  const mx = seeds.reduce((a, s) => a + s[0], 0) / seeds.length;
+  const my = seeds.reduce((a, s) => a + s[1], 0) / seeds.length;
+  seeds.sort((a, b) => Math.atan2(a[1] - my, a[0] - mx) - Math.atan2(b[1] - my, b[0] - mx));
+  const stride = Math.max(1, Math.floor(seeds.length / nSeeds));
+  const chosen = seeds.filter((_, k) => k % stride === 0);
+
+  // grid coords -> svg coords
+  const toSvg = (x: number, y: number): [number, number] => [
+    vp.sx((grid.x0 + x * grid.dx) * scaleMilsPerMeter),
+    vp.sy((grid.y0 + y * grid.dy) * scaleMilsPerMeter),
+  ];
+
+  const paths: string[] = [];
+  const stopLo = 0.02;
+  for (const [sx0, sy0] of chosen) {
+    let x = sx0;
+    let y = sy0;
+    let d = '';
+    const [px0, py0] = toSvg(x, y);
+    d = `M${px0.toFixed(1)},${py0.toFixed(1)}`;
+    const aspect = grid.dy / grid.dx; // physical anisotropy of grid cells
+    for (let step = 0; step < 4000; step++) {
+      const v = sample(x, y);
+      if (Number.isNaN(v) || norm(v) < stopLo) break; // hit conductor/ground/edge
+      const [gx, gy] = grad(x, y);
+      if (!Number.isFinite(gx) || !Number.isFinite(gy)) break;
+      // E = -grad(phi); convert to physically isotropic step in grid units
+      let ex = -gx / grid.dx;
+      let ey = -gy / grid.dy;
+      const mag = Math.hypot(ex * grid.dx, ey * grid.dy);
+      if (mag < 1e-12) break;
+      const scale = 0.7 / Math.hypot(ex, ey * aspect || 1);
+      ex *= scale;
+      ey *= scale;
+      // midpoint (RK2) refinement
+      const [gx2, gy2] = grad(x + ex / 2, y + ey / 2);
+      if (Number.isFinite(gx2) && Number.isFinite(gy2)) {
+        let ex2 = -gx2 / grid.dx;
+        let ey2 = -gy2 / grid.dy;
+        const s2 = 0.7 / (Math.hypot(ex2, ey2 * aspect) || 1);
+        ex = ex2 * s2;
+        ey = ey2 * s2;
+      }
+      x += ex;
+      y += ey;
+      if (x < 0 || y < 0 || x > nx - 1 || y > ny - 1) break;
+      if (step % 2 === 0) {
+        const [px, py] = toSvg(x, y);
+        d += `L${px.toFixed(1)},${py.toFixed(1)}`;
+      }
+    }
+    if (d.includes('L')) paths.push(d);
+  }
+  return paths;
+}
+
+export function renderStreamlinesInto(svg: SVGSVGElement, paths: string[]) {
+  const ns = 'http://www.w3.org/2000/svg';
+  for (const d of paths) {
+    const el = document.createElementNS(ns, 'path');
+    el.setAttribute('d', d);
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', '#b3593a');
+    el.setAttribute('stroke-width', '1.3');
+    el.setAttribute('opacity', '0.85');
+    svg.appendChild(el);
+  }
+}
+
 export function drawColorbar(canvas: HTMLCanvasElement) {
   const W = (canvas.width = 160);
   const H = (canvas.height = 12);

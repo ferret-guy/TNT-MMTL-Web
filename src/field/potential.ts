@@ -58,15 +58,15 @@ export function prepElements(sol: FieldSolution): PreppedElement[] {
     const x = e.x as [number, number, number];
     const y = e.y as [number, number, number];
     const length = Math.hypot(x[2] - x[0], y[2] - y[0]);
-    // Conductor elements carry FREE surface charge sigma_free = eps_r eps0 E;
-    // the free-space kernel needs the total (polarization-included) charge
-    // sigma_total = sigma_free / eps_r of the touching dielectric.
-    // Dielectric interface elements already carry bound charge: use as-is.
-    const scale = e.type === 'conductor' ? 1 / (e.epsilon || 1) : 1;
+    // In this BEM formulation the conductor unknowns are already the
+    // free-space-equivalent (total) charge and the interface elements carry
+    // the bound charge, so both integrate against the kernel as-is.
+    // (Dividing conductor sigma by the contacting eps_r was tested and makes
+    // the boundary-condition check ~10x worse on coupled lines.)
     return {
       x,
       y,
-      sigma: e.sigma.map((s) => s * scale) as [number, number, number],
+      sigma: e.sigma as [number, number, number],
       length: Math.max(length, 1e-30),
       cx: x[1],
       cy: y[1],
@@ -78,7 +78,7 @@ export function prepElements(sol: FieldSolution): PreppedElement[] {
 /** raw (uncalibrated) potential at a point, integrating one element */
 function elementPotential(el: PreppedElement, px: number, py: number, depth: number): number {
   const d = Math.hypot(px - el.cx, py - el.cy);
-  if (depth < 3 && d < 2 * el.length) {
+  if (depth < 4 && d < 3 * el.length) {
     // subdivide in xi: integrate two halves with mapped quadrature
     return subIntegrate(el, px, py, -1, 0, depth + 1) + subIntegrate(el, px, py, 0, 1, depth + 1);
   }
@@ -99,7 +99,7 @@ function subIntegrate(
   const mx = sm0 * el.x[0] + sm1 * el.x[1] + sm2 * el.x[2];
   const my = sm0 * el.y[0] + sm1 * el.y[1] + sm2 * el.y[2];
   const span = (el.length * (b - a)) / 2;
-  if (depth < 5 && Math.hypot(px - mx, py - my) < span) {
+  if (depth < 7 && Math.hypot(px - mx, py - my) < 1.5 * span) {
     return subIntegrate(el, px, py, a, mid, depth + 1) + subIntegrate(el, px, py, mid, b, depth + 1);
   }
   let acc = 0;
