@@ -464,13 +464,22 @@ int main (int argc, char **argv)
   }
 
   fclose(output_file1);
-  
+
   //#ifdef NMMTL_DUMP_DIAG
   fclose(dump_file);
   //#endif
 
+  /* tnt-web patch: the field plot file was never closed; native builds got
+     away with it because exit() flushes stdio, but under Emscripten with
+     EXIT_RUNTIME=0 the buffered tail is lost (truncated plot data). */
+  if(plotFile != NULL)
+  {
+    fclose(plotFile);
+    plotFile = NULL;
+  }
+
   printf ("\nMMTL is done\n");
-  return 0;  
+  return 0;
 }
 
 

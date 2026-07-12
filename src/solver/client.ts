@@ -23,6 +23,12 @@ export class SolverClient {
 
   private spawn(): Worker {
     const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+    // resolve the wasm location from the document base (the worker itself is
+    // bundled under <base>/assets/ and cannot resolve <base> on its own)
+    w.postMessage({
+      cmd: 'init',
+      bemUrl: new URL(`${import.meta.env.BASE_URL}wasm/bem.mjs`, document.baseURI).href,
+    });
     w.onmessage = (ev) => this.dispatch(ev.data);
     w.onerror = (ev) => {
       for (const p of this.pending.values()) p.reject(new Error(ev.message || 'worker error'));

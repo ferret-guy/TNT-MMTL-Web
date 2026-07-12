@@ -50,6 +50,14 @@ Every deviation from pristine upstream is logged here.
    post-processor is not part of this project, and the harness parsers skip
    unknown lines.
 
+## vendor/mmtl/bem/src/nmmtl.cpp
+
+6. **`fclose(plotFile)` added at the end of `main`.** Upstream never closed
+   the field-plot file and relied on `exit()` flushing stdio; under
+   Emscripten with `EXIT_RUNTIME=0` nothing flushes, so the plot data was
+   truncated mid-line. `.result` and the dump file were already closed
+   explicitly.
+
 ## Debug instrumentation (inactive unless -DTNTWEB_GEOM_TRACE)
 
 `nmmtl_intersections.cpp`, `nmmtl_det_intersections.cpp`, and

@@ -89,6 +89,14 @@ function renderInputs(force = false) {
   renderStackupEditor(freeformPane);
 }
 
+// input mode follows the visible tab
+document.querySelector('[data-bs-target="#tab-preset"]')?.addEventListener('shown.bs.tab', () =>
+  store.update({ mode: 'preset' }),
+);
+document.querySelector('[data-bs-target="#tab-freeform"]')?.addEventListener('shown.bs.tab', () =>
+  store.update({ mode: 'freeform' }),
+);
+
 /* ---------------- cross-section ---------------- */
 const csSvg = $('#cross-section') as unknown as SVGSVGElement;
 function renderCS() {
@@ -128,6 +136,8 @@ async function doSolve() {
     const out = await client.solve(xsctn, stackup.cseg, stackup.dseg);
     solvedStackup = stackup;
     fieldGridStale = true;
+    // E2E/debug handle (harmless in production)
+    (window as unknown as Record<string, unknown>).__tntweb = { out, stackup, xsctn };
     store.update({ lastSolve: out, solving: false });
   } catch (e) {
     store.update({
@@ -243,10 +253,12 @@ async function computeField() {
     const cx0 = Math.min(...conductors.map((p) => p.x0));
     const cx1 = Math.max(...conductors.map((p) => p.x1));
     const focus = Math.max((cx1 - cx0) * 2.2, geo.yTop * 4);
+    // the solver images the bottom ground plane across y=0, so the physical
+    // field region starts at the plane surface
     const bbox = {
       x0: Math.max(geo.domainX0, (cx0 + cx1) / 2 - focus / 2) * scale,
       x1: Math.min(geo.domainX1, (cx0 + cx1) / 2 + focus / 2) * scale,
-      y0: -padY * 0.4 * scale,
+      y0: 0,
       y1: (geo.yTop + padY) * scale,
     };
     const masks = conductors.map((p) => ({
@@ -317,8 +329,11 @@ store.subscribe((s) => {
   }
 });
 
-/* keep Bootstrap Tab import alive (used via data attributes) */
-void Tab;
+// restore the saved input tab (listeners above keep mode in sync afterwards)
+if (store.get().mode === 'freeform') {
+  const btn = document.querySelector('[data-bs-target="#tab-freeform"]');
+  if (btn) new Tab(btn).show();
+}
 
 renderInputs(true);
 renderCS();

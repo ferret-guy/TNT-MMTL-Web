@@ -2,23 +2,29 @@
  * Reconstruct the 2D electrostatic potential from the solver's boundary
  * charge output (see parseFieldPlot.mjs).
  *
- * phi(p) = -(1/(2 pi eps0)) * SUM_elements INT sigma(xi) ln|p - x(xi)| J(xi) dxi
+ * The solver's kernel (nmmtl_interval.cpp) is the grounded-half-plane
+ * Green's function with an image across y = 0:
  *
- * The charge file covers ALL boundaries -- driven/passive conductors,
- * discretized ground planes, and dielectric interfaces (bound charge) -- so
- * the free-space kernel is complete: no image terms.
+ *     G(p, q) = ln( |p - q*| / |p - q| ),   q* = (qx, -qy)
+ *
+ * so the bottom ground plane is represented by images (not elements), the
+ * y=0 equipotential is built in, and the 2D log gauge constant cancels.
+ * We integrate the same kernel over every element in the plot file
+ * (conductors, any top ground plane, dielectric interface bound charge):
+ *
+ *   phi(p) ∝ SUM_elements INT sigma(xi) ln(d_img/d_dir) J(xi) dxi
  *
  * Elements are quadratic (3 nodes). We integrate with 8-point Gauss-Legendre
- * per element and subdivide 4x when the field point is closer than twice the
- * element length (log kernel near-singularity).
+ * per element and subdivide when the field point is close (log kernel
+ * near-singularity). Conductor elements carry free charge; dividing by the
+ * contacting dielectric constant (emitted by our patched plot writer) turns
+ * it into the total charge the kernel needs.
  *
- * The reconstruction has an unknown overall scale/offset (BEM sigma
- * normalization + the 2D log-potential gauge), so we least-squares fit
- * a*phi + b against known boundary conditions (driven conductor = 1,
- * grounds = 0) sampled on conductor elements; the residual doubles as an
- * accuracy metric.
+ * The remaining unknown is a single scale (BEM sigma normalization), fixed
+ * by probing conductor-interior points (see calibrate()); the spread of
+ * those probes doubles as an accuracy metric shown in the UI.
  */
-import type { FieldElement, FieldSolution } from '../solver/parseFieldPlot.ts';
+import type { FieldElement, FieldSolution } from '../solver/parseFieldPlot.mjs';
 
 const GAUSS8_X = [
   -0.9602898564975363, -0.7966664774136267, -0.525532409916329, -0.1834346424956498,
@@ -52,10 +58,15 @@ export function prepElements(sol: FieldSolution): PreppedElement[] {
     const x = e.x as [number, number, number];
     const y = e.y as [number, number, number];
     const length = Math.hypot(x[2] - x[0], y[2] - y[0]);
+    // Conductor elements carry FREE surface charge sigma_free = eps_r eps0 E;
+    // the free-space kernel needs the total (polarization-included) charge
+    // sigma_total = sigma_free / eps_r of the touching dielectric.
+    // Dielectric interface elements already carry bound charge: use as-is.
+    const scale = e.type === 'conductor' ? 1 / (e.epsilon || 1) : 1;
     return {
       x,
       y,
-      sigma: e.sigma as [number, number, number],
+      sigma: e.sigma.map((s) => s * scale) as [number, number, number],
       length: Math.max(length, 1e-30),
       cx: x[1],
       cy: y[1],
@@ -103,11 +114,13 @@ function subIntegrate(
     const jy = d0 * el.y[0] + d1 * el.y[1] + d2 * el.y[2];
     const jac = Math.hypot(jx, jy);
     const sig = n0 * el.sigma[0] + n1 * el.sigma[1] + n2 * el.sigma[2];
-    const r2 = (px - gx) ** 2 + (py - gy) ** 2;
-    acc += GAUSS8_W[k] * sig * Math.log(Math.max(r2, 1e-40)) * jac;
+    // solver kernel: ln(d_image / d_direct), image across y=0
+    const r2dir = (px - gx) ** 2 + (py - gy) ** 2;
+    const r2img = (px - gx) ** 2 + (py + gy) ** 2;
+    acc += GAUSS8_W[k] * sig * Math.log(Math.max(r2img, 1e-40) / Math.max(r2dir, 1e-40)) * jac;
   }
-  // ln|r| = 0.5 ln r^2 ; kernel scale folded into calibration
-  return -0.5 * acc * half;
+  // ln = 0.5 ln(^2); overall scale folded into calibration
+  return 0.5 * acc * half;
 }
 
 export function potentialAt(els: PreppedElement[], px: number, py: number): number {
@@ -123,36 +136,75 @@ export interface Calibration {
 }
 
 /**
- * Sample conductor-surface potentials and least-squares fit a*phi+b to the
- * expected BCs. The driven line's elements should sit at 1, all other
- * conductors (incl. ground planes) at 0 -- but the plot file does not tag
- * which conductor elements belong to the driven line. We exploit the BEM
- * property that conductor potentials are piecewise constant: sample each
- * conductor element's midpoint, cluster values, map the cluster containing
- * the max to 1 and the cluster containing the min to 0.
+ * Calibrate the reconstruction scale against conductor boundary conditions.
+ *
+ * The solver's image kernel makes phi(y=0) = 0 exactly, so no offset is
+ * needed (b = 0). For the scale: conductor interiors are field-free, so the
+ * potential at each conductor's centroid equals its surface potential
+ * exactly (and the quadrature there is smooth -- unlike on-surface points).
+ * Elements of one conductor form an end-to-end chain in the plot file, so we
+ * group them by endpoint adjacency, evaluate each contour's centroid, scale
+ * the largest |phi| (the driven line, at 1 V) to 1, and report how far the
+ * other contours sit from their expected {0, 1} values.
  */
-export function calibrate(els: PreppedElement[], sampleEvery = 3): Calibration {
-  const samples: number[] = [];
+export function calibrate(els: PreppedElement[]): Calibration {
   const conductorEls = els.filter((e) => e.isConductor);
-  for (let i = 0; i < conductorEls.length; i += sampleEvery) {
-    const el = conductorEls[i];
-    // sample slightly off the midpoint node
-    samples.push(potentialAt(els, el.cx, el.cy));
+  if (!conductorEls.length) return { a: 1, b: 0, maxResidual: NaN };
+
+  // group into contours: a new contour starts when the element's start point
+  // is not the previous element's end point
+  const groups: PreppedElement[][] = [];
+  let cur: PreppedElement[] = [];
+  let prev: PreppedElement | null = null;
+  for (const el of conductorEls) {
+    if (
+      prev &&
+      Math.hypot(el.x[0] - prev.x[2], el.y[0] - prev.y[2]) > 0.25 * (el.length + prev.length)
+    ) {
+      groups.push(cur);
+      cur = [];
+    }
+    cur.push(el);
+    prev = el;
   }
-  if (samples.length < 2) return { a: 1, b: 0, maxResidual: NaN };
-  const lo = Math.min(...samples);
-  const hi = Math.max(...samples);
-  if (hi - lo < 1e-30) return { a: 1, b: -lo, maxResidual: NaN };
-  // map lo->0, hi->1
-  const a = 1 / (hi - lo);
-  const b = -lo * a;
-  // residual: distance of each calibrated sample from its nearest of {0, 1}
+  if (cur.length) groups.push(cur);
+
+  // several interior probes per contour: centroid plus points nudged along
+  // the contour's x extent -- a conductor interior is an equipotential, so
+  // their spread is an independent accuracy measure even with one conductor
+  const probesPerGroup = groups.map((g) => {
+    let sx = 0;
+    let sy = 0;
+    for (const el of g) {
+      sx += el.cx;
+      sy += el.cy;
+    }
+    const cx = sx / g.length;
+    const cy = sy / g.length;
+    const xs = g.flatMap((el) => [el.x[0], el.x[2]]);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    return [
+      { x: cx, y: cy },
+      { x: cx - 0.25 * spanX, y: cy },
+      { x: cx + 0.25 * spanX, y: cy },
+    ];
+  });
+  const groupValues = probesPerGroup.map((probes) =>
+    probes.map((p) => potentialAt(els, p.x, p.y)),
+  );
+  const centroidValues = groupValues.map((v) => v[0]);
+  const driven = Math.max(...centroidValues.map((v) => Math.abs(v)));
+  if (!(driven > 0)) return { a: 1, b: 0, maxResidual: NaN };
+  const a = 1 / centroidValues[centroidValues.map((v) => Math.abs(v)).indexOf(driven)];
+
   let maxResidual = 0;
-  for (const s of samples) {
-    const v = a * s + b;
-    maxResidual = Math.max(maxResidual, Math.min(Math.abs(v), Math.abs(v - 1)));
+  for (const vals of groupValues) {
+    for (const v of vals) {
+      const s = a * v;
+      maxResidual = Math.max(maxResidual, Math.min(Math.abs(s), Math.abs(s - 1)));
+    }
   }
-  return { a, b, maxResidual };
+  return { a, b: 0, maxResidual };
 }
 
 export interface FieldGrid {

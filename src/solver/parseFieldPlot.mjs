@@ -64,6 +64,9 @@ export function parseFieldPlot(text) {
         y: [],
         sigma: [],
         edges: [],
+        epsilon: 1, // contacting dielectric (conductor elements)
+        epsilonPlus: 1,
+        epsilonMinus: 1,
       };
       continue;
     }
@@ -74,6 +77,12 @@ export function parseFieldPlot(text) {
       el.y = line.slice('Y Points:'.length).trim().split(/\s+/).map(Number);
     } else if (line.startsWith('Charge Values:')) {
       el.sigma = line.slice('Charge Values:'.length).trim().split(/\s+/).map(Number);
+    } else if (line.startsWith('Epsilon:')) {
+      el.epsilon = Number(line.slice('Epsilon:'.length).trim()) || 1;
+    } else if (line.startsWith('EpsilonPM:')) {
+      const [p, m] = line.slice('EpsilonPM:'.length).trim().split(/\s+/).map(Number);
+      el.epsilonPlus = p || 1;
+      el.epsilonMinus = m || 1;
     } else if (line.startsWith('Edge:')) {
       const m = line.match(/^Edge:\s*(\d)\s+(\S+)/);
       if (m) el.edges.push({ end: Number(m[1]) === 1 ? 1 : 0, nu: Number(m[2]) });

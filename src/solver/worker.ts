@@ -14,9 +14,11 @@ import { parseFieldPlot } from './parseFieldPlot.mjs';
 import { computeGrid, type MaskRect } from '../field/potential.ts';
 import { runGoalSeek, type GoalSeekSpec } from '../analysis/goalSeek.ts';
 
-// Emscripten module factory: lives in public/, referenced by URL so Vite
-// serves bem.wasm alongside bem.mjs untouched.
-const bemUrl = new URL('../../public/wasm/bem.mjs', import.meta.url).href;
+// Emscripten module factory: lives in public/, served at <base>/wasm/. The
+// worker script itself is bundled under <base>/assets/, so relative
+// resolution here would land in the wrong directory -- the main thread
+// (which knows the real document base) sends the URL in an init message.
+let bemUrl = new URL('/wasm/bem.mjs', self.location.href).href; // dev fallback
 
 interface BemModule {
   FS: {
@@ -104,6 +106,11 @@ async function solveOnce(req: SolveRequest) {
 self.onmessage = async (ev: MessageEvent) => {
   const msg = ev.data;
   try {
+    if (msg.cmd === 'init') {
+      bemUrl = msg.bemUrl;
+      factory = null; // re-import against the new URL if needed
+      return;
+    }
     if (msg.cmd === 'solve') {
       const out = await solveOnce(msg);
       (self as unknown as Worker).postMessage({ id: msg.id, ...out });

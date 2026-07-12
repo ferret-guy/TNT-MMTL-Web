@@ -45,8 +45,11 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   const lamOptions = LAMINATES.map(
     (l) => `<option value="${l.name}" ${Math.abs(l.er - p.er) < 1e-9 && Math.abs(l.tanD - p.tanD) < 1e-9 ? 'selected' : ''}>${l.name} (εr ${l.er})</option>`,
   ).join('');
+  // several materials share a conductivity (copper/lead both 5.0e7):
+  // mark only the first match selected
+  const firstCondMatch = CONDUCTORS.findIndex((c) => Math.abs(c.sigma - p.sigma) < 1);
   const condOptions = CONDUCTORS.map(
-    (c) => `<option value="${c.name}" ${Math.abs(c.sigma - p.sigma) < 1 ? 'selected' : ''}>${c.name}</option>`,
+    (c, i) => `<option value="${c.name}" ${i === firstCondMatch ? 'selected' : ''}>${c.name}</option>`,
   ).join('');
   const coverOptions = COVER_MATERIALS.map((c, i) => `<option value="${i}">${c.name} (εr ${c.er})</option>`).join('');
 

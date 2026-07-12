@@ -53,7 +53,7 @@ export function parseResult(text) {
     ['Propagation Velocity', 'vel'],
     ['Propagation Delay Odd/Even', 'delayoe'],
     ['Propagation Delay', 'delay'],
-    ['Rdc', 'Rdc'],
+    ['Rdc:', 'Rdc'],
     ['Far-End', 'FXT'],
     ['Near-End', 'BXT'],
   ];
