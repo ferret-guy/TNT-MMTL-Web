@@ -1,0 +1,6 @@
+# Keep vendored solver source and shell scripts byte-stable (LF) --
+# they are consumed by WSL/emscripten toolchains.
+vendor/** -text
+toolchain/** text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
