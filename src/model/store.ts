@@ -25,6 +25,46 @@ export interface AppState {
 }
 
 const LS_KEY = 'tnt-web-state-v1';
+const CFG_VERSION = 1;
+
+/** the shareable/persistable subset of the state */
+function persistable(s: AppState) {
+  const { lastSolve: _ls, solving: _sv, ...keep } = s;
+  return { v: CFG_VERSION, ...keep };
+}
+
+/** base64url-encode the config for use in a URL hash */
+export function encodeConfig(s: AppState): string {
+  const json = JSON.stringify(persistable(s));
+  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(json)));
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function decodeConfig(str: string): Partial<AppState> | null {
+  try {
+    const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    return parsed as Partial<AppState>;
+  } catch {
+    return null;
+  }
+}
+
+/** merge a saved/shared partial state over defaults (tolerates old versions) */
+function mergeOverDefaults(saved: Partial<AppState>): AppState {
+  const d = defaultState();
+  return {
+    ...d,
+    ...saved,
+    presetParams: { ...d.presetParams, ...(saved.presetParams ?? {}) },
+    lossParams: { ...d.lossParams, ...(saved.lossParams ?? {}) },
+    freeform: (saved.freeform as AppState['freeform']) ?? d.freeform,
+    lastSolve: null,
+    solving: false,
+  };
+}
 
 export function currentStackup(s: AppState): Stackup {
   return s.mode === 'preset'
@@ -67,7 +107,19 @@ class Store {
   private listeners = new Set<Listener>();
 
   constructor() {
-    this.state = this.load() ?? defaultState();
+    this.state = this.loadFromUrl() ?? this.load() ?? defaultState();
+  }
+
+  /** #cfg=... in the URL wins over localStorage (shared links) */
+  private loadFromUrl(): AppState | null {
+    try {
+      const m = window.location.hash.match(/[#&]cfg=([A-Za-z0-9_-]+)/);
+      if (!m) return null;
+      const saved = decodeConfig(m[1]);
+      return saved ? mergeOverDefaults(saved) : null;
+    } catch {
+      return null;
+    }
   }
 
   get(): AppState {
@@ -87,8 +139,7 @@ class Store {
 
   private persist() {
     try {
-      const { lastSolve: _ls, solving: _s, ...keep } = this.state;
-      localStorage.setItem(LS_KEY, JSON.stringify(keep));
+      localStorage.setItem(LS_KEY, JSON.stringify(persistable(this.state)));
     } catch {
       /* quota/private mode: fine */
     }
@@ -98,18 +149,8 @@ class Store {
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return null;
-      const saved = JSON.parse(raw);
       // merge over defaults so new fields appear after upgrades
-      const d = defaultState();
-      return {
-        ...d,
-        ...saved,
-        presetParams: { ...d.presetParams, ...saved.presetParams },
-        lossParams: { ...d.lossParams, ...saved.lossParams },
-        freeform: saved.freeform ?? d.freeform,
-        lastSolve: null,
-        solving: false,
-      };
+      return mergeOverDefaults(JSON.parse(raw));
     } catch {
       return null;
     }

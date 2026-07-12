@@ -7,7 +7,7 @@ import '@fontsource/atkinson-hyperlegible/700.css';
 import './style.css';
 import { Tab } from 'bootstrap';
 
-import { store, currentStackup } from './model/store.ts';
+import { store, currentStackup, encodeConfig } from './model/store.ts';
 import { generateXsctn, validateStackup } from './xsctn/generate.ts';
 import { SolverClient } from './solver/client.ts';
 import { renderPresetForm } from './ui/presetForm.ts';
@@ -424,11 +424,51 @@ $('#loss-freq-unit').addEventListener('change', updFreq);
 // plot needs a resize when its tab becomes visible
 document.querySelector('[data-bs-target="#tab-loss"]')?.addEventListener('shown.bs.tab', renderLoss);
 
+/* ---------------- URL config + share ---------------- */
+// keep the URL hash in sync with the configuration (debounced replaceState:
+// bookmark/copy the address bar at any time and get this exact setup back)
+let hashTimer: number | undefined;
+function syncUrlHash() {
+  window.clearTimeout(hashTimer);
+  hashTimer = window.setTimeout(() => {
+    history.replaceState(null, '', `#cfg=${encodeConfig(store.get())}`);
+  }, 300);
+}
+
+const btnShare = $('#btn-share') as HTMLButtonElement;
+btnShare.addEventListener('click', async () => {
+  const url = `${location.origin}${location.pathname}#cfg=${encodeConfig(store.get())}`;
+  history.replaceState(null, '', url);
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(url);
+    copied = true;
+  } catch {
+    // no async-clipboard permission: synchronous textarea fallback
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    copied = document.execCommand('copy');
+    ta.remove();
+  }
+  btnShare.textContent = copied ? 'Link copied ✓' : 'Copy failed — use the address bar';
+  btnShare.classList.replace('btn-outline-primary', copied ? 'btn-success' : 'btn-warning');
+  setTimeout(() => {
+    btnShare.textContent = 'Share';
+    btnShare.classList.remove('btn-success', 'btn-warning');
+    btnShare.classList.add('btn-outline-primary');
+  }, 1600);
+});
+
 /* ---------------- store subscription ---------------- */
 let lastSolveRef: unknown = null;
 store.subscribe((s) => {
   renderInputs();
   if (viewMode === 'geom') renderCS();
+  syncUrlHash();
   if (s.lastSolve !== lastSolveRef) {
     lastSolveRef = s.lastSolve;
     renderOutputs();

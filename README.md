@@ -28,10 +28,15 @@ quasi-static solver from the [TNT](https://mmtl.sourceforge.net/) package
   R(f) = √(R²dc + (K·Rs√f)²) with Hammerstad–Jensen or Huray surface
   roughness, G(f) = 2πf·C·tanδ. (The BEM itself is quasi-static; TNT never
   had a roughness parameter — this layer adds it.)
-- **Field plot**: electrostatic potential heatmap + equipotentials
-  reconstructed from the solver's boundary charges using its own
-  grounded-half-plane image kernel; a conductor-interior probe check reports
-  the reconstruction accuracy (typ. ~1%).
+- **Field views** on the main cross-section: potential heatmap with
+  equipotentials, or E-field streamlines running from the driven trace to
+  ground / the other conductor — reconstructed from the solver's boundary
+  charges using its own grounded-half-plane image kernel; a
+  conductor-interior probe check reports the reconstruction accuracy
+  (typ. ~1%).
+- **Shareable links**: the full configuration lives in the URL hash
+  (kept in sync as you edit); the **Share** button copies a link that
+  reopens the exact setup on any machine.
 
 ## Running
 
