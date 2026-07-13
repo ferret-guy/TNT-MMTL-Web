@@ -63,7 +63,7 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     units: 'mils',
     w: 10,
     t: 1.4, // 1 oz copper
-    etch: 0,
+    etch: 0.25, // typical fab etch: top width = base - 0.7 mil at 1 oz (2*0.25*1.4)
     h: 6,
     er: 4.27, // FR402
     tanD: 0.016,

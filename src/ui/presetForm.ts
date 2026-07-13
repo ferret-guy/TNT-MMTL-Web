@@ -83,17 +83,29 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     <div class="row g-2">
       ${dim('w', 'Trace Width', p.w)}
       ${diff ? dim('s', 'Pair Gap (edge to edge)', p.s) : ''}
-      <div class="col-6 col-xxl-4">
-        <label class="form-label mb-0 small" for="pf-copper-weight">Copper Weight</label>
-        <select class="form-select form-select-sm" id="pf-copper-weight">
-          ${COPPER_WEIGHTS.map((wt, i) => `<option value="${i}" ${i === wIdx ? 'selected' : ''}>${wt.label}</option>`).join('')}
-          <option value="custom" ${wIdx < 0 ? 'selected' : ''}>custom…</option>
-        </select>
-      </div>
-      ${dim('t', 'Trace Thickness', p.t)}
+      ${dimFieldHtml({
+        id: 'pf-t',
+        label: 'Copper Weight &amp; Thickness',
+        mils: p.t,
+        unit,
+        min: 0.01,
+        prefixHtml: `<select class="form-select" id="pf-copper-weight" style="max-width:5.6rem"
+            title="standard copper weight — picking one sets the thickness; typing a custom thickness back-selects the matching weight">
+            ${COPPER_WEIGHTS.map((wt, i) => `<option value="${i}" ${i === wIdx ? 'selected' : ''}>${wt.label}</option>`).join('')}
+            <option value="custom" ${wIdx < 0 ? 'selected' : ''}>custom…</option>
+          </select>`,
+      })}
       <div class="col-6 col-xxl-4">
         <label class="form-label mb-0 small" for="pf-etch">Etch Factor (inset per side)</label>
-        <div class="input-group input-group-sm">
+        <div class="input-group input-group-sm"
+             title="etching narrows the trace toward the top, setting the sidewall angle: top width = base width − 2 × EF × thickness">
+          <span class="input-group-text py-0 px-1">
+            <svg width="44" height="24" viewBox="0 0 44 24" aria-hidden="true" class="etch-icon">
+              <line class="etch-base" x1="1" y1="21.5" x2="43" y2="21.5"/>
+              <rect class="etch-orig" x="7" y="5" width="30" height="16"/>
+              <polygon id="pf-etch-shape" class="etch-trap" points=""/>
+            </svg>
+          </span>
           <input type="number" step="0.05" min="0" max="1" class="form-control" id="pf-etch" value="${p.etch}">
           <span class="input-group-text">× t</span>
         </div>
@@ -217,7 +229,6 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
           </button>
         </div>
         <div id="gs-result" class="small mt-2"></div>
-        <div class="tiny text-body-secondary">iteration details appear in the Log tab</div>
       </div>
     </div>
   `;
@@ -282,7 +293,21 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     const el = container.querySelector(`#pf-${id}`) as HTMLInputElement | null;
     el?.addEventListener('change', () => apply(num(el.value, 0)));
   };
-  bindNum('etch', (v) => upd({ etch: Math.min(Math.max(v, 0), 1) }));
+  /* etch mini-diagram: sidewall slope follows the etch factor (tan from
+     vertical = EF, so inset in px = EF * drawn height); top clamped like
+     topWidthOf() so EF=1 still leaves a visible top edge */
+  const etchShape = container.querySelector('#pf-etch-shape') as SVGPolygonElement | null;
+  const updateEtchIcon = (etch: number) => {
+    const inset = Math.min(Math.max(etch, 0), 1) * 16;
+    const half = Math.max(30 - 2 * inset, 6) / 2;
+    etchShape?.setAttribute('points', `7,21 37,21 ${22 + half},5 ${22 - half},5`);
+  };
+  updateEtchIcon(p.etch);
+  bindNum('etch', (v) => {
+    const etch = Math.min(Math.max(v, 0), 1);
+    upd({ etch });
+    updateEtchIcon(etch);
+  });
   bindNum('er', (v) => upd({ er: v }));
   bindNum('tand', (v) => upd({ tanD: v }));
   bindNum('sigma', (v) => upd({ sigma: v }));

@@ -84,6 +84,9 @@ export interface DimFieldOpts {
   unit: DimUnit;
   min?: number; // canonical mils
   colClass?: string;
+  /** extra markup rendered inside the input-group, before the input
+   *  (e.g. a linked select sharing the field's label and border) */
+  prefixHtml?: string;
 }
 
 /** render markup; call bindDimFields() on the container afterwards */
@@ -92,6 +95,7 @@ export function dimFieldHtml(o: DimFieldOpts): string {
     <div class="${o.colClass ?? 'col-6 col-xxl-4'}">
       <label class="form-label mb-0 small" for="${o.id}">${o.label}</label>
       <div class="input-group input-group-sm">
+        ${o.prefixHtml ?? ''}
         <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
                class="form-control dim-field" id="${o.id}"
                data-mils="${o.mils}" data-unit="${o.unit}" ${o.min != null ? `data-min="${o.min}"` : ''}

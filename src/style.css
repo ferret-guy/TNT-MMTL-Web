@@ -49,6 +49,28 @@
   transition: box-shadow 120ms ease-out;
 }
 
+/* etch-factor mini diagram: dashed un-etched profile + copper trapezoid
+   whose sidewall slope tracks the etch factor */
+.etch-icon {
+  display: block;
+}
+.etch-base {
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1;
+}
+.etch-orig {
+  fill: none;
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+}
+.etch-trap {
+  fill: #e8b64c; /* matches the cross-section copper */
+  stroke: #a97e17;
+  stroke-width: 1;
+}
+
 /* charts */
 .chart-grid {
   stroke: var(--bs-border-color);
