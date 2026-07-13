@@ -29,7 +29,8 @@ import {
 } from './ui/fieldView.ts';
 import { renderLossPlot } from './ui/lossPlot.ts';
 import { computeLineStats } from './analysis/lineStats.ts';
-import { lossCurve, lossInputsFrom, UNIT_SCALE } from './analysis/losses.ts';
+import { lossCurve, lossInputsFrom, UNIT_SCALE, type RefinedR } from './analysis/losses.ts';
+import { buildCalcRLGeometry, parseCalcRLOut } from './analysis/calcrlInput.ts';
 import type { FieldGrid } from './field/potential.ts';
 import { isConductor, isSignal, type ConductorItem, type Stackup } from './model/types.ts';
 import type { DimUnit } from './ui/dimField.ts';
@@ -303,6 +304,8 @@ async function doSolve() {
     const out = await client.solve(xsctn, stackup.cseg, stackup.dseg);
     solvedStackup = stackup;
     fieldGridStale = true;
+    calcrlRefined = null; // measured R(f) belongs to the previous geometry
+    $('#calcrl-note').textContent = '';
     (window as unknown as Record<string, unknown>).__tntweb = { out, stackup, xsctn };
     store.update({ lastSolve: out, solving: false });
     if (viewMode !== 'geom') void computeFieldGrid();
@@ -359,6 +362,8 @@ function statCard(label: string, value: string, sub = ''): string {
   </div></div></div>`;
 }
 
+let calcrlRefined: RefinedR | null = null;
+
 function renderLoss() {
   const s = store.get();
   const plotEl = $('#loss-plot');
@@ -380,8 +385,10 @@ function renderLoss() {
     note.textContent = 'no loss inputs';
     return;
   }
-  const curve = lossCurve(inputs, s.lossParams);
-  const modeLabel = diffMode ? 'odd mode, per line' : (out.result.names[0] ?? 'line 1');
+  const curve = lossCurve(inputs, s.lossParams, calcrlRefined);
+  const modeLabel =
+    (diffMode ? 'odd mode, per line' : (out.result.names[0] ?? 'line 1')) +
+    (calcrlRefined ? ' — calcRL-refined R(f)' : '');
   renderLossPlot(plotEl, curve, s.lineLengthM, s.designFreqHz, modeLabel);
 
   const stats = computeLineStats(out.result, curve, s.lineLengthM, s.designFreqHz, diffMode);
@@ -441,6 +448,55 @@ $('#loss-freq-unit').addEventListener('change', updFreq);
 
 // plot needs a resize when its tab becomes visible
 document.querySelector('[data-bs-target="#tab-loss"]')?.addEventListener('shown.bs.tab', renderLoss);
+
+/* ---- calcRL refinement: measured skin+proximity R(f) ---- */
+const CALCRL_FREQS = [1e8, 3e8, 1e9, 3e9, 1e10, 3e10];
+const btnCalcRL = $('#btn-calcrl') as HTMLButtonElement;
+btnCalcRL.addEventListener('click', async () => {
+  const s = store.get();
+  const note = $('#calcrl-note');
+  if (!s.lastSolve?.ok || !solvedStackup) {
+    note.textContent = 'solve first';
+    return;
+  }
+  const geom = buildCalcRLGeometry(solvedStackup);
+  if (!geom) {
+    note.textContent = 'no signal conductors';
+    return;
+  }
+  const sigma = (drivingConductor(solvedStackup)?.conductivity ?? 5e7);
+  const diffMode = s.lastSolve.result!.nSignals === 2 && s.lastSolve.result!.zOdd != null;
+  btnCalcRL.disabled = true;
+  $('#calcrl-spinner').classList.remove('d-none');
+  try {
+    const { outs } = await client.calcRLSweep(
+      CALCRL_FREQS.map((f) => geom.inputFor(f, sigma)),
+      (frac) => (note.textContent = `computing… ${Math.round(frac * 100)}%`),
+    );
+    const fHz: number[] = [];
+    const rOhmPerM: number[] = [];
+    outs.forEach((text, i) => {
+      const rl = parseCalcRLOut(text, geom.nSignals);
+      if (!rl) return;
+      // mode resistance: odd mode = R11 - R12 for a pair, else R11
+      const r = diffMode && geom.nSignals >= 2 ? rl.R[0][0] - rl.R[0][1] : rl.R[0][0];
+      if (Number.isFinite(r) && r > 0) {
+        fHz.push(CALCRL_FREQS[i]);
+        rOhmPerM.push(r);
+      }
+    });
+    if (fHz.length < 3) throw new Error('calcRL returned too few valid points');
+    calcrlRefined = { fHz, rOhmPerM };
+    const flanks = solvedStackup.items.some((i) => isConductor(i) && i.isGround);
+    note.textContent = `refined at ${fHz.length} frequencies${flanks ? ' (CPW side grounds not modeled)' : ''}`;
+    renderLoss();
+  } catch (e) {
+    note.textContent = (e as Error).message;
+  } finally {
+    btnCalcRL.disabled = false;
+    $('#calcrl-spinner').classList.add('d-none');
+  }
+});
 
 /* ---------------- URL config + share ---------------- */
 // keep the URL hash in sync with the configuration (debounced replaceState:

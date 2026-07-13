@@ -28,6 +28,11 @@ quasi-static solver from the [TNT](https://mmtl.sourceforge.net/) package
   R(f) = √(R²dc + (K·Rs√f)²) with Hammerstad–Jensen or Huray surface
   roughness, G(f) = 2πf·C·tanδ. (The BEM itself is quasi-static; TNT never
   had a roughness parameter — this layer adds it.)
+- **calcRL refinement** (optional button): TNT's full-wave wavelet solver,
+  also compiled to WASM, replaces the analytic √f skin term with measured
+  R(f) — true skin + proximity effect + ground-return resistance — at six
+  frequencies (~1 s each). Approximations: ground modeled as a finite bar
+  the width of the BEM domain; CPW side grounds not represented.
 - **Field views** on the main cross-section: potential heatmap with
   equipotentials, or E-field streamlines running from the driven trace to
   ground / the other conductor — reconstructed from the solver's boundary

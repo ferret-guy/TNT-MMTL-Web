@@ -29,6 +29,7 @@ export class SolverClient {
     w.postMessage({
       cmd: 'init',
       bemUrl: new URL(`${import.meta.env.BASE_URL}wasm/bem.mjs`, document.baseURI).href,
+      calcrlUrl: new URL(`${import.meta.env.BASE_URL}wasm/calcrl.mjs`, document.baseURI).href,
     });
     w.onmessage = (ev) => this.dispatch(ev.data);
     w.onerror = (ev) => {
@@ -90,6 +91,16 @@ export class SolverClient {
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onProgress });
       this.worker.postMessage({ id, cmd: 'fieldGrid', ...req });
+    });
+  }
+
+  /** run calcRL once per prepared input; resolves to the .out texts */
+  calcRLSweep(inputs: string[], onProgress?: (frac: number) => void): Promise<{ outs: string[] }> {
+    const id = this.nextId++;
+    this.busy = true;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onProgress });
+      this.worker.postMessage({ id, cmd: 'calcRLSweep', inputs });
     });
   }
 

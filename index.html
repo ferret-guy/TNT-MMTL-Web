@@ -123,7 +123,15 @@
                     <span class="input-group-text">µm RMS</span>
                   </div>
                 </div>
-                <span class="small text-body-secondary ms-auto" id="loss-note"></span>
+                <div class="ms-auto text-end">
+                  <button class="btn btn-sm btn-outline-primary" id="btn-calcrl"
+                          title="replace the analytic √f skin term with calcRL — TNT's full-wave wavelet solver — computing true skin + proximity R(f) at several frequencies">
+                    <span class="spinner-border spinner-border-sm d-none" id="calcrl-spinner"></span>
+                    Refine R(f) with calcRL
+                  </button>
+                  <div class="tiny text-body-secondary" id="calcrl-note"></div>
+                </div>
+                <span class="small text-body-secondary" id="loss-note"></span>
               </div>
               <div class="row row-cols-2 row-cols-xl-4 g-2 mb-2" id="line-stats"></div>
               <div id="loss-plot" style="min-height:340px"></div>

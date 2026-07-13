@@ -58,6 +58,17 @@ Every deviation from pristine upstream is logged here.
    truncated mid-line. `.result` and the dump file were already closed
    explicitly.
 
+## vendor/mmtl/calcRL/src/calcRL.cpp
+
+7. **argv off-by-ones**: upstream tested `argc > 0` / `argc > 1` before
+   dereferencing `argv[1]` / `argv[2]` (argc counts argv[0]), crashing when
+   run with one argument. Corrected to `argc > 1` / `argc > 2`.
+8. **Resistance matrix truncated in the .out file**: an xmgr-export block sat
+   inside the resistance-row loop and reused its `i2` loop variable, so only
+   the first matrix row was ever written (the shipped `jc.out_save` predates
+   the bug). The block now runs once, after the loop. Restored output matches
+   the 2004 golden to every printed digit.
+
 ## Debug instrumentation (inactive unless -DTNTWEB_GEOM_TRACE)
 
 `nmmtl_intersections.cpp`, `nmmtl_det_intersections.cpp`, and

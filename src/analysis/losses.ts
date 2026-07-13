@@ -80,7 +80,25 @@ export interface LossInputs {
 
 const NP_TO_DB = 8.685889638;
 
-export function lossCurve(inp: LossInputs, p: LossParams): LossCurve {
+/** measured R(f) points from calcRL (mode resistance, ohm/m) */
+export interface RefinedR {
+  fHz: number[];
+  rOhmPerM: number[];
+}
+
+/** log-log interpolation of the refined R(f) (clamped at the ends) */
+function refinedRAt(ref: RefinedR, fHz: number): number {
+  const xs = ref.fHz;
+  if (fHz <= xs[0]) return ref.rOhmPerM[0] * Math.sqrt(fHz / xs[0]); // sqrt-f below range
+  if (fHz >= xs[xs.length - 1])
+    return ref.rOhmPerM[xs.length - 1] * Math.sqrt(fHz / xs[xs.length - 1]);
+  let i = 1;
+  while (xs[i] < fHz) i++;
+  const t = (Math.log(fHz) - Math.log(xs[i - 1])) / (Math.log(xs[i]) - Math.log(xs[i - 1]));
+  return Math.exp(Math.log(ref.rOhmPerM[i - 1]) * (1 - t) + Math.log(ref.rOhmPerM[i]) * t);
+}
+
+export function lossCurve(inp: LossInputs, p: LossParams, refined?: RefinedR | null): LossCurve {
   const out: LossCurve = {
     fHz: [],
     alphaC: [],
@@ -99,8 +117,10 @@ export function lossCurve(inp: LossInputs, p: LossParams): LossCurve {
     const f = 10 ** (logMin + ((logMax - logMin) * i) / (n - 1));
     const delta = skinDepthM(f, inp.sigma);
     const k = roughnessK(p.roughnessModel, rqM, delta, p.hurayRatio);
-    const rs = Math.sqrt(Math.PI * f * MU0 / inp.sigma) / inp.perimeterM;
-    const r = Math.sqrt(inp.rdcPerM ** 2 + (k * rs) ** 2);
+    // skin-effect term: analytic isolated-conductor Rs sqrt(f), or the
+    // calcRL-measured R(f) (true skin + proximity) when a refinement ran
+    const rSkin = refined ? refinedRAt(refined, f) : Math.sqrt(Math.PI * f * MU0 / inp.sigma) / inp.perimeterM;
+    const r = Math.sqrt(inp.rdcPerM ** 2 + (k * rSkin) ** 2);
     const g = 2 * Math.PI * f * inp.cPerM * inp.tanD;
     const aC = (r / (2 * inp.z0)) * NP_TO_DB;
     const aD = ((g * inp.z0) / 2) * NP_TO_DB;
