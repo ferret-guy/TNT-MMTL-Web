@@ -9,6 +9,7 @@ interface Pending {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   onIter?: (it: GoalSeekIter) => void;
+  onProgress?: (frac: number) => void;
 }
 
 export class SolverClient {
@@ -45,6 +46,10 @@ export class SolverClient {
       p.onIter?.(msg as unknown as GoalSeekIter);
       return;
     }
+    if (msg.evt === 'progress') {
+      p.onProgress?.((msg as unknown as { frac: number }).frac);
+      return;
+    }
     this.pending.delete(msg.id);
     this.busy = this.pending.size > 0;
     p.resolve(msg);
@@ -68,18 +73,22 @@ export class SolverClient {
     });
   }
 
-  fieldGrid(req: {
-    fieldText: string;
-    lineIndex: number;
-    bbox: { x0: number; y0: number; x1: number; y1: number };
-    nx: number;
-    ny: number;
-    masks: Array<{ x0: number; y0: number; x1: number; y1: number }>;
-  }): Promise<import('../field/potential.ts').FieldGrid & { lines: string[] }> {
+  fieldGrid(
+    req: {
+      fieldText: string;
+      lineIndex: number;
+      bbox: { x0: number; y0: number; x1: number; y1: number };
+      nx: number;
+      ny: number;
+      masks: Array<{ x0: number; y0: number; x1: number; y1: number }>;
+      maskPolys: Array<Array<[number, number]>>;
+    },
+    onProgress?: (frac: number) => void,
+  ): Promise<import('../field/potential.ts').FieldGrid & { lines: string[] }> {
     const id = this.nextId++;
     this.busy = true;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onProgress });
       this.worker.postMessage({ id, cmd: 'fieldGrid', ...req });
     });
   }

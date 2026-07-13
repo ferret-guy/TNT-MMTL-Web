@@ -150,9 +150,35 @@ export function streamlinePaths(
     const v11 = phi[(j + 1) * nx + i + 1];
     return v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
   };
+  /** central differences, falling back to one-sided next to masked cells so
+   *  lines keep their direction all the way to a conductor surface */
   const grad = (x: number, y: number): [number, number] => {
     const e = 0.6;
-    return [(sample(x + e, y) - sample(x - e, y)) / (2 * e), (sample(x, y + e) - sample(x, y - e)) / (2 * e)];
+    const c = sample(x, y);
+    let gx = (sample(x + e, y) - sample(x - e, y)) / (2 * e);
+    if (!Number.isFinite(gx)) {
+      const r = (sample(x + e, y) - c) / e;
+      const l = (c - sample(x - e, y)) / e;
+      gx = Number.isFinite(r) ? r : l;
+    }
+    let gy = (sample(x, y + e) - sample(x, y - e)) / (2 * e);
+    if (!Number.isFinite(gy)) {
+      const u = (sample(x, y + e) - c) / e;
+      const d = (c - sample(x, y - e)) / e;
+      gy = Number.isFinite(u) ? u : d;
+    }
+    return [gx, gy];
+  };
+  /** last valid point -> first invalid point: bisect onto the boundary */
+  const snapToBoundary = (x0: number, y0: number, x1: number, y1: number): [number, number] => {
+    let a: [number, number] = [x0, y0];
+    let b: [number, number] = [x1, y1];
+    for (let k = 0; k < 14; k++) {
+      const m: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (Number.isFinite(sample(m[0], m[1]))) a = m;
+      else b = m;
+    }
+    return b;
   };
 
   // seeds: midpoints of the phi = seedLevel contour cells (a ring hugging the
@@ -185,46 +211,66 @@ export function streamlinePaths(
     vp.sy((grid.y0 + y * grid.dy) * scaleMilsPerMeter),
   ];
 
-  const paths: string[] = [];
-  const stopLo = 0.02;
-  for (const [sx0, sy0] of chosen) {
-    let x = sx0;
-    let y = sy0;
-    let d = '';
-    const [px0, py0] = toSvg(x, y);
-    d = `M${px0.toFixed(1)},${py0.toFixed(1)}`;
-    const aspect = grid.dy / grid.dx; // physical anisotropy of grid cells
-    for (let step = 0; step < 4000; step++) {
+  const aspect = grid.dy / grid.dx; // physical anisotropy of grid cells
+  const stopLo = 0.005;
+
+  /** integrate from a point along +/-E; returns grid-coordinate polyline
+   *  ending exactly on the terminating boundary */
+  const trace = (x0: number, y0: number, sign: 1 | -1): Array<[number, number]> => {
+    const pts: Array<[number, number]> = [[x0, y0]];
+    let x = x0;
+    let y = y0;
+    for (let step = 0; step < 6000; step++) {
       const v = sample(x, y);
-      if (Number.isNaN(v) || norm(v) < stopLo) break; // hit conductor/ground/edge
+      if (!Number.isFinite(v)) break;
+      if (sign > 0 && norm(v) < stopLo) break; // reached ground potential
+      if (sign < 0 && norm(v) > 0.999) break; // reached the driven surface
       const [gx, gy] = grad(x, y);
       if (!Number.isFinite(gx) || !Number.isFinite(gy)) break;
-      // E = -grad(phi); convert to physically isotropic step in grid units
-      let ex = -gx / grid.dx;
-      let ey = -gy / grid.dy;
-      const mag = Math.hypot(ex * grid.dx, ey * grid.dy);
-      if (mag < 1e-12) break;
-      const scale = 0.7 / Math.hypot(ex, ey * aspect || 1);
-      ex *= scale;
-      ey *= scale;
-      // midpoint (RK2) refinement
+      let ex = -sign * gx / grid.dx;
+      let ey = -sign * gy / grid.dy;
+      const stepLen = 0.45 / (Math.hypot(ex, ey * aspect) || 1);
+      ex *= stepLen;
+      ey *= stepLen;
       const [gx2, gy2] = grad(x + ex / 2, y + ey / 2);
       if (Number.isFinite(gx2) && Number.isFinite(gy2)) {
-        let ex2 = -gx2 / grid.dx;
-        let ey2 = -gy2 / grid.dy;
-        const s2 = 0.7 / (Math.hypot(ex2, ey2 * aspect) || 1);
+        const ex2 = -sign * gx2 / grid.dx;
+        const ey2 = -sign * gy2 / grid.dy;
+        const s2 = 0.45 / (Math.hypot(ex2, ey2 * aspect) || 1);
         ex = ex2 * s2;
         ey = ey2 * s2;
       }
-      x += ex;
-      y += ey;
-      if (x < 0 || y < 0 || x > nx - 1 || y > ny - 1) break;
-      if (step % 2 === 0) {
-        const [px, py] = toSvg(x, y);
-        d += `L${px.toFixed(1)},${py.toFixed(1)}`;
+      const xN = x + ex;
+      const yN = y + ey;
+      if (xN < 0 || yN < 0 || xN > nx - 1 || yN > ny - 1) {
+        pts.push([xN, yN]);
+        break;
       }
+      if (!Number.isFinite(sample(xN, yN))) {
+        // land exactly on the conductor/ground boundary
+        pts.push(snapToBoundary(x, y, xN, yN));
+        break;
+      }
+      x = xN;
+      y = yN;
+      pts.push([x, y]);
     }
-    if (d.includes('L')) paths.push(d);
+    return pts;
+  };
+
+  const paths: string[] = [];
+  for (const [sx0, sy0] of chosen) {
+    // backward to the driven surface, forward to ground/other conductor
+    const back = trace(sx0, sy0, -1).reverse();
+    const fwd = trace(sx0, sy0, 1);
+    const pts = [...back, ...fwd.slice(1)];
+    if (pts.length < 4) continue;
+    let d = '';
+    for (let k = 0; k < pts.length; k++) {
+      const [px, py] = toSvg(pts[k][0], pts[k][1]);
+      d += `${k === 0 ? 'M' : 'L'}${px.toFixed(1)},${py.toFixed(1)}`;
+    }
+    paths.push(d);
   }
   return paths;
 }

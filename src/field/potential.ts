@@ -227,12 +227,27 @@ export interface MaskRect {
   y1: number;
 }
 
+/** conductor cross-sections as polygons (so etched/trapezoid edges mask true) */
+export type MaskPoly = Array<[number, number]>;
+
+function pointInPoly(px: number, py: number, poly: MaskPoly): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 export function computeGrid(
   sol: FieldSolution,
   bbox: { x0: number; y0: number; x1: number; y1: number },
   nx: number,
   ny: number,
   masks: MaskRect[],
+  polys: MaskPoly[] = [],
+  onProgress?: (frac: number) => void,
 ): FieldGrid {
   const els = prepElements(sol);
   const cal = calibrate(els);
@@ -252,6 +267,14 @@ export function computeGrid(
           break;
         }
       }
+      if (!masked) {
+        for (const poly of polys) {
+          if (pointInPoly(px, py, poly)) {
+            masked = true;
+            break;
+          }
+        }
+      }
       if (masked) {
         phi[j * nx + i] = NaN;
         continue;
@@ -261,6 +284,7 @@ export function computeGrid(
       if (v < mn) mn = v;
       if (v > mx) mx = v;
     }
+    if (onProgress && (j & 7) === 0) onProgress(j / ny);
   }
   return {
     nx,

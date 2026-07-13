@@ -304,12 +304,20 @@ export function renderCrossSection(
     return el;
   };
 
+  // preset-generated conformal mask pieces render as ONE seamless outline
+  // (drawn last, translucent, sides angled like the copper) instead of a
+  // layer rect + lump rects with visible seams
+  const isCoverPoly = (p: PlacedPoly) =>
+    p.item != null && 'id' in p.item && /^cover(Layer|Lump)/.test((p.item as { id: string }).id);
+  const coverLayer = g.polys.find((p) => p.kind === 'layer' && isCoverPoly(p));
+  const coverLumps = g.polys.filter((p) => p.kind === 'block' && isCoverPoly(p));
+
   // layers first, then blocks, then grounds + conductors on top
-  for (const p of g.polys.filter((p) => p.kind === 'layer')) {
+  for (const p of g.polys.filter((p) => p.kind === 'layer' && !isCoverPoly(p))) {
     poly(p.pts, erColor(p.er!, erMap), '#b3c2ce', `εr = ${p.er}`);
   }
-  for (const p of g.polys.filter((p) => p.kind === 'block')) {
-    poly(p.pts, erColor(p.er!, erMap), '#9fb2c0', `cover/block εr = ${p.er}`);
+  for (const p of g.polys.filter((p) => p.kind === 'block' && !isCoverPoly(p))) {
+    poly(p.pts, erColor(p.er!, erMap), '#9fb2c0', `dielectric block εr = ${p.er}`);
   }
   for (const p of g.polys.filter((p) => p.kind === 'ground')) {
     poly(p.pts, 'url(#gndhatch)', '#5c6b7e', 'ground plane');
@@ -321,6 +329,26 @@ export function renderCrossSection(
       p.isGroundConductor ? '#5c6b7e' : '#a97e17',
       p.isGroundConductor ? 'ground strip' : `signal conductor`,
     );
+  }
+
+  if (coverLayer) {
+    // side slope matched to the first signal trapezoid's etch angle
+    const trap = s.items.find((i) => i.kind === 'TrapezoidConductors');
+    const slope =
+      trap && trap.kind === 'TrapezoidConductors' && trap.height > 0
+        ? Math.max(0, (trap.bottomWidth - trap.topWidth) / (2 * trap.height))
+        : 0;
+    const yB = coverLayer.y0;
+    const yL = coverLayer.y1;
+    const pts: Array<[number, number]> = [[coverLayer.x0, yB], [coverLayer.x0, yL]];
+    for (const lump of [...coverLumps].sort((a, b) => a.x0 - b.x0)) {
+      const hl = lump.y1 - lump.y0;
+      const inset = Math.min(slope * hl, (lump.x1 - lump.x0) / 2 - 1e-9);
+      pts.push([lump.x0, yL], [lump.x0 + inset, lump.y1], [lump.x1 - inset, lump.y1], [lump.x1, yL]);
+    }
+    pts.push([coverLayer.x1, yL], [coverLayer.x1, yB]);
+    const el = poly(pts, erColor(coverLayer.er!, erMap), '#8aa5b8', `solder mask εr = ${coverLayer.er}`);
+    if (!outline) el.setAttribute('fill-opacity', '0.55');
   }
 
   // dimension callouts (clickable)

@@ -212,13 +212,13 @@ async function computeFieldGrid() {
       y0: vp.vy0 * scale,
       y1: vp.vy1 * scale,
     };
-    const nx = 380;
-    const ny = Math.max(120, Math.min(300, Math.round((nx * (bbox.y1 - bbox.y0)) / (bbox.x1 - bbox.x0))));
+    const nx = 420;
+    const ny = Math.max(140, Math.min(320, Math.round((nx * (bbox.y1 - bbox.y0)) / (bbox.x1 - bbox.x0))));
     const masks = [
       // nothing below the (imaged) bottom ground plane
       { x0: bbox.x0 - 1, y0: bbox.y0 - 1, x1: bbox.x1 + 1, y1: 0 },
       ...geo.polys
-        .filter((p) => p.kind === 'conductor' || p.kind === 'ground')
+        .filter((p) => p.kind === 'ground')
         .map((p) => ({
           x0: p.x0 * scale,
           y0: p.y0 * scale,
@@ -226,14 +226,32 @@ async function computeFieldGrid() {
           y1: p.y1 * scale,
         })),
     ];
-    fieldGridCache = await client.fieldGrid({
-      fieldText: s.lastSolve.fieldText,
-      lineIndex: parseInt(csDriven.value || '0', 10),
-      bbox,
-      nx,
-      ny,
-      masks,
-    });
+    // conductors mask by their true polygon so trapezoid/etched edges show
+    const maskPolys = geo.polys
+      .filter((p) => p.kind === 'conductor')
+      .map((p) => p.pts.map(([x, y]): [number, number] => [x * scale, y * scale]));
+    const progress = $('#cs-progress');
+    const progressBar = $('#cs-progress-bar');
+    progress.classList.remove('d-none');
+    progressBar.style.width = '0%';
+    try {
+      fieldGridCache = await client.fieldGrid(
+        {
+          fieldText: s.lastSolve.fieldText,
+          lineIndex: parseInt(csDriven.value || '0', 10),
+          bbox,
+          nx,
+          ny,
+          masks,
+          maskPolys,
+        },
+        (frac) => {
+          progressBar.style.width = `${Math.round(frac * 100)}%`;
+        },
+      );
+    } finally {
+      progress.classList.add('d-none');
+    }
     fieldGridStale = false;
     // populate driven-line selector
     csDriven.innerHTML = fieldGridCache.lines
@@ -431,13 +449,13 @@ let hashTimer: number | undefined;
 function syncUrlHash() {
   window.clearTimeout(hashTimer);
   hashTimer = window.setTimeout(() => {
-    history.replaceState(null, '', `#cfg=${encodeConfig(store.get())}`);
+    history.replaceState(null, '', `#${encodeConfig(store.get())}`);
   }, 300);
 }
 
 const btnShare = $('#btn-share') as HTMLButtonElement;
 btnShare.addEventListener('click', async () => {
-  const url = `${location.origin}${location.pathname}#cfg=${encodeConfig(store.get())}`;
+  const url = `${location.origin}${location.pathname}#${encodeConfig(store.get())}`;
   history.replaceState(null, '', url);
   let copied = false;
   try {

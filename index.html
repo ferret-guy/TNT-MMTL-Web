@@ -62,6 +62,12 @@
               <div class="position-relative" id="cs-stack">
                 <canvas id="cs-field-canvas" class="position-absolute d-none" style="image-rendering:auto"></canvas>
                 <svg id="cross-section" width="100%" class="position-relative" role="img" aria-label="stackup cross-section"></svg>
+                <div class="position-absolute top-50 start-50 translate-middle w-50 d-none" id="cs-progress">
+                  <div class="progress" role="progressbar" style="height: 10px">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="cs-progress-bar" style="width: 0%"></div>
+                  </div>
+                  <div class="text-center small text-body-secondary mt-1">computing field…</div>
+                </div>
               </div>
               <div class="d-none align-items-center gap-2 mt-1 small text-body-secondary" id="cs-field-legend">
                 <span>0 V</span><canvas id="field-colorbar" style="height:12px"></canvas><span>1 V (driven)</span>

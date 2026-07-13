@@ -11,7 +11,7 @@
  */
 import { parseResult } from './parseResult.mjs';
 import { parseFieldPlot } from './parseFieldPlot.mjs';
-import { computeGrid, type MaskRect } from '../field/potential.ts';
+import { computeGrid, type MaskPoly, type MaskRect } from '../field/potential.ts';
 import { runGoalSeek, type GoalSeekSpec } from '../analysis/goalSeek.ts';
 
 // Emscripten module factory: lives in public/, served at <base>/wasm/. The
@@ -130,6 +130,8 @@ self.onmessage = async (ev: MessageEvent) => {
         msg.nx ?? 240,
         msg.ny ?? 180,
         (msg.masks ?? []) as MaskRect[],
+        (msg.maskPolys ?? []) as MaskPoly[],
+        (frac) => (self as unknown as Worker).postMessage({ id: msg.id, evt: 'progress', frac }),
       );
       (self as unknown as Worker).postMessage(
         { id: msg.id, ...grid, lines: solutions.map((s) => s.line) },

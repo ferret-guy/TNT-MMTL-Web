@@ -70,7 +70,8 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     sigma: 5.0e7, // copper
     s: 8,
     h2: 6,
-    cover: null,
+    // conformal solder mask on by default for surface traces (LPI, 1 mil)
+    cover: { thickness: 1.0, er: 3.8, tanD: 0.02 },
     cpwGap: 8,
     cpwGroundWidth: 50,
     cpwBottomGround: true,
@@ -83,6 +84,7 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     p.h = 8;
     p.h2 = 8;
     p.w = 7;
+    p.cover = null; // buried trace: no mask
   }
   if (kind === 'cpw') {
     p.w = 12;
