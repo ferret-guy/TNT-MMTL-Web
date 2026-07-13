@@ -147,6 +147,14 @@ function focusField(fieldId: string) {
   el.select();
 }
 
+/** hovering a dimension callout glows the mapped input so the pairing is obvious */
+function hoverField(fieldId: string, hovering: boolean) {
+  const el = document.querySelector<HTMLInputElement>(`#${fieldId}`);
+  // glow the whole input-group (field + unit button) when present
+  const target = el?.closest('.input-group') ?? el;
+  target?.classList.toggle('dim-glow', hovering);
+}
+
 function renderCS() {
   const s = store.get();
   const stackup = viewMode === 'geom' ? currentStackup(s) : (solvedStackup ?? currentStackup(s));
@@ -156,6 +164,7 @@ function renderCS() {
       showDims: viewMode === 'geom' && s.mode === 'preset',
       outline: viewMode !== 'geom',
       onDimClick: focusField,
+      onDimHover: hoverField,
       displayUnit: s.displayUnit as DimUnit,
     });
   } catch (e) {

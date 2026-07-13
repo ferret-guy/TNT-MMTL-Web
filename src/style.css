@@ -10,7 +10,8 @@
   font-size: 0.72rem;
 }
 
-/* cross-section dimension callouts */
+/* cross-section dimension callouts: hover highlights the callout and glows
+   the mapped form field; click edits */
 .cs-dim {
   font-size: 11px;
   fill: var(--bs-body-color);
@@ -19,6 +20,33 @@
   stroke: var(--bs-secondary-color);
   stroke-width: 1;
   marker-start: none;
+}
+.cs-dim-hit {
+  stroke: transparent;
+  stroke-width: 14; /* generous hover/click target */
+}
+.cs-dim-group {
+  cursor: pointer;
+}
+.cs-dim-group:hover .cs-dimline {
+  stroke: var(--bs-primary);
+  stroke-width: 2;
+}
+.cs-dim-group:hover .cs-dim {
+  fill: var(--bs-primary);
+  font-weight: 700;
+}
+
+/* the form field a hovered callout maps to */
+.dim-glow,
+.input-group.dim-glow .form-control,
+.input-group.dim-glow .input-group-text {
+  border-color: var(--bs-primary);
+}
+.dim-glow {
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.35);
+  border-radius: var(--bs-border-radius);
+  transition: box-shadow 120ms ease-out;
 }
 
 /* charts */

@@ -264,6 +264,8 @@ export interface RenderOptions {
   outline?: boolean;
   /** dimension label clicked: focus the named form field */
   onDimClick?: (fieldId: string) => void;
+  /** dimension hovered: glow the named form field so its mapping is obvious */
+  onDimHover?: (fieldId: string, hovering: boolean) => void;
   /** display unit for callout labels (model values are mils) */
   displayUnit?: DimUnit;
 }
@@ -351,59 +353,80 @@ export function renderCrossSection(
     if (!outline) el.setAttribute('fill-opacity', '0.55');
   }
 
-  // dimension callouts (clickable)
+  // dimension callouts: line + label grouped, hover glows the mapped form
+  // field, click focuses it to edit
   const conductors = g.polys.filter((p) => p.kind === 'conductor');
   if (opts.showDims && !outline && conductors.length) {
     const sigs = conductors.filter((c) => !c.isGroundConductor);
-    const text = (x: number, y: number, str: string, fieldId?: string, anchor = 'middle') => {
-      const t = document.createElementNS(ns, 'text');
-      t.setAttribute('x', String(x));
-      t.setAttribute('y', String(y));
-      t.setAttribute('text-anchor', anchor);
-      t.setAttribute('class', fieldId ? 'cs-dim cs-dim-click' : 'cs-dim');
-      t.textContent = str;
-      if (fieldId && opts.onDimClick) {
-        t.addEventListener('click', () => opts.onDimClick!(fieldId));
-        const tt = document.createElementNS(ns, 'title');
-        tt.textContent = 'click to edit';
-        t.appendChild(tt);
-      }
-      svg.appendChild(t);
-    };
-    const line = (x0: number, y0: number, x1: number, y1: number) => {
-      const l = document.createElementNS(ns, 'line');
-      l.setAttribute('x1', String(x0));
-      l.setAttribute('y1', String(y0));
-      l.setAttribute('x2', String(x1));
-      l.setAttribute('y2', String(y1));
-      l.setAttribute('class', 'cs-dimline');
-      svg.appendChild(l);
-    };
     const unit = opts.displayUnit ?? 'mils';
     const unitLabel = unit === 'um' ? 'µm' : unit === 'inch' ? 'in' : unit;
     const fmt = (v: number) => formatDim(v, unit);
 
+    /** one callout: dimension line + label + fat invisible hit line */
+    const dim = (
+      fieldId: string,
+      lx0: number,
+      ly0: number,
+      lx1: number,
+      ly1: number,
+      tx: number,
+      ty: number,
+      label: string,
+      anchor = 'middle',
+    ) => {
+      const grp = document.createElementNS(ns, 'g');
+      grp.setAttribute('class', 'cs-dim-group');
+      const mk = (cls: string) => {
+        const l = document.createElementNS(ns, 'line');
+        l.setAttribute('x1', String(lx0));
+        l.setAttribute('y1', String(ly0));
+        l.setAttribute('x2', String(lx1));
+        l.setAttribute('y2', String(ly1));
+        l.setAttribute('class', cls);
+        grp.appendChild(l);
+      };
+      mk('cs-dimline');
+      mk('cs-dim-hit'); // wide transparent stroke: generous hover/click target
+      const t = document.createElementNS(ns, 'text');
+      t.setAttribute('x', String(tx));
+      t.setAttribute('y', String(ty));
+      t.setAttribute('text-anchor', anchor);
+      t.setAttribute('class', 'cs-dim');
+      t.textContent = label;
+      grp.appendChild(t);
+      const tt = document.createElementNS(ns, 'title');
+      tt.textContent = 'click to edit';
+      grp.appendChild(tt);
+      if (opts.onDimClick) grp.addEventListener('click', () => opts.onDimClick!(fieldId));
+      if (opts.onDimHover) {
+        grp.addEventListener('mouseenter', () => opts.onDimHover!(fieldId, true));
+        grp.addEventListener('mouseleave', () => opts.onDimHover!(fieldId, false));
+      }
+      svg.appendChild(grp);
+    };
+
     const c0 = sigs[0] ?? conductors[0];
     // w: above the first signal trace (headroom guaranteed by computeViewport)
     const yW = sy(c0.y1) - 8;
-    line(sx(c0.x0), yW, sx(c0.x1), yW);
-    text((sx(c0.x0) + sx(c0.x1)) / 2, yW - 4, `w = ${fmt(c0.x1 - c0.x0)} ${unitLabel}`, 'pf-w');
+    dim('pf-w', sx(c0.x0), yW, sx(c0.x1), yW,
+        (sx(c0.x0) + sx(c0.x1)) / 2, yW - 4, `w = ${fmt(c0.x1 - c0.x0)} ${unitLabel}`);
     // s (gap) for 2 signals
     if (sigs.length >= 2) {
       const yS = sy(sigs[0].y1) - 8;
-      line(sx(sigs[0].x1), yS, sx(sigs[1].x0), yS);
-      text((sx(sigs[0].x1) + sx(sigs[1].x0)) / 2, yS - 4, `s = ${fmt(sigs[1].x0 - sigs[0].x1)}`, 'pf-s');
+      dim('pf-s', sx(sigs[0].x1), yS, sx(sigs[1].x0), yS,
+          (sx(sigs[0].x1) + sx(sigs[1].x0)) / 2, yS - 4, `s = ${fmt(sigs[1].x0 - sigs[0].x1)}`);
     }
     // t: right of the first trace
     const xT = sx(c0.x1) + 8;
-    line(xT, sy(c0.y0), xT, sy(c0.y1));
-    text(xT + 4, (sy(c0.y0) + sy(c0.y1)) / 2 + 4, `t = ${fmt(c0.y1 - c0.y0)}`, 'pf-t', 'start');
+    dim('pf-t', xT, sy(c0.y0), xT, sy(c0.y1),
+        xT + 4, (sy(c0.y0) + sy(c0.y1)) / 2 + 4, `t = ${fmt(c0.y1 - c0.y0)}`, 'start');
     // h (first layer below conductors)
     const firstLayer = g.polys.find((p) => p.kind === 'layer');
     if (firstLayer) {
       const lx = sx(vp.vx1) - 12;
-      line(lx, sy(firstLayer.y0), lx, sy(firstLayer.y1));
-      text(lx - 4, (sy(firstLayer.y0) + sy(firstLayer.y1)) / 2 + 4, `h = ${fmt(firstLayer.y1 - firstLayer.y0)}`, 'pf-h', 'end');
+      dim('pf-h', lx, sy(firstLayer.y0), lx, sy(firstLayer.y1),
+          lx - 4, (sy(firstLayer.y0) + sy(firstLayer.y1)) / 2 + 4,
+          `h = ${fmt(firstLayer.y1 - firstLayer.y0)}`, 'end');
     }
   }
   return vp;
