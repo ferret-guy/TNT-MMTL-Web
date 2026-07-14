@@ -96,10 +96,18 @@ export function renderResults(
     ),
   );
   if (r.epsEff.length) card('Effective εr', r.epsEff.map((e) => e.toFixed(3)).join(' / '));
+  if (r.velocity.length)
+    card(
+      'Propagation velocity',
+      r.velocity.map((v) => eng(v)).join(' / ') + ' m/s',
+      diff && r.velocityOdd != null
+        ? `odd ${eng(r.velocityOdd)} / even ${eng(r.velocityEven!)} m/s`
+        : '',
+    );
   if (r.delay.length)
     card(
-      'Propagation delay',
-      r.delay.map((d) => `${(d * 1e12 / 1000).toFixed(2)}`).join(' / ') + ' ps/cm',
+      'Propagation delay per unit length',
+      r.delay.map((d) => `${(d * 1e10).toFixed(2)}`).join(' / ') + ' ps/cm',
       diff && r.delayOdd != null ? `odd ${(r.delayOdd * 1e10).toFixed(2)} / even ${(r.delayEven! * 1e10).toFixed(2)} ps/cm` : '',
     );
 

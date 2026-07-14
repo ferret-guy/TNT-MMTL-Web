@@ -2,7 +2,13 @@
  * Guided preset form: geometry + materials + advanced accordion + goal seek.
  * All dimension fields are canonical-mils dimFields with per-field units.
  */
-import { CONDUCTORS, COVER_MATERIALS, LAMINATES } from '../model/materials.ts';
+import {
+  CONDUCTORS,
+  COVER_MATERIALS,
+  laminateById,
+  LAMINATES,
+  materialAtFrequency,
+} from '../model/materials.ts';
 import { DEFAULT_COVER, etchReductionOf, type PresetKind } from '../model/presets.ts';
 import { store } from '../model/store.ts';
 import { bindDimFields, dimFieldHtml, formatDim, retargetDimFields, type DimUnit } from './dimField.ts';
@@ -84,31 +90,54 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   const dim = (id: string, label: string, mils: number, colClass?: string, prefixHtml?: string) =>
     dimFieldHtml({ id: `pf-${id}`, label, mils, unit, min: 0.01, colClass, prefixHtml });
 
-  const laminateOptions = (er: number, tanD: number) => LAMINATES.map(
-    (l) =>
-      `<option value="${l.name}" ${Math.abs(l.er - er) < 1e-9 && Math.abs(l.tanD - tanD) < 1e-9 ? 'selected' : ''}>${l.name} (εr ${l.er}, tan δ ${l.tanD})</option>`,
-  ).join('');
+  const materialNumber = (value: number) => String(+value.toPrecision(5));
+  const frequencyLabel = (fHz: number) => fHz >= 1e9
+    ? `${+(fHz / 1e9).toPrecision(4)} GHz`
+    : fHz >= 1e6
+      ? `${+(fHz / 1e6).toPrecision(4)} MHz`
+      : `${+(fHz / 1e3).toPrecision(4)} kHz`;
+  const laminateOptions = (selectedId: string | null) => LAMINATES.map((laminate) => {
+    const atFrequency = materialAtFrequency(laminate, s.designFreqHz)!;
+    return `<option value="${laminate.id}" ${laminate.id === selectedId ? 'selected' : ''}>${laminate.name} (εr ${materialNumber(atFrequency.er)}, tan δ ${materialNumber(atFrequency.tanD)})</option>`;
+  }).join('');
   const materialRow = (
     suffix: '' | 'upper' | 'lower',
+    materialId: string | null,
     er: number,
     tanD: number,
     compact = false,
   ) => {
     const tail = suffix ? `-${suffix}` : '';
+    const selectedLaminate = laminateById(materialId);
+    const resolved = materialAtFrequency(selectedLaminate, s.designFreqHz);
+    const shownEr = resolved?.er ?? er;
+    const shownTanD = resolved?.tanD ?? tanD;
+    const noteId = `pf-laminate-note${tail}`;
+    const clampNote = resolved?.clamped === 'low'
+      ? ' Values are clamped to the lowest characterized frequency.'
+      : resolved?.clamped === 'high'
+        ? ' Values are clamped to the highest characterized frequency.'
+        : '';
+    const lookupNote = selectedLaminate
+      ? `Lookup at ${frequencyLabel(s.designFreqHz)}: εr ${materialNumber(shownEr)}, tan δ ${materialNumber(shownTanD)}.${clampNote}`
+      : '';
+    const note = [selectedLaminate?.note, lookupNote].filter(Boolean).join(' ');
+    const locked = selectedLaminate ? ' disabled aria-disabled="true"' : '';
     return `<div class="row g-2 ${compact ? 'mt-1' : 'mt-1'}">
       <div class="${compact ? 'col-12' : 'col-6'}">
         <label class="form-label mb-0 small" for="pf-laminate${tail}">Laminate</label>
-        <select class="form-select form-select-sm" id="pf-laminate${tail}">
-          <option value="">— custom —</option>${laminateOptions(er, tanD)}
+        <select class="form-select form-select-sm" id="pf-laminate${tail}" aria-describedby="${noteId}">
+          <option value="" ${selectedLaminate ? '' : 'selected'}>— custom —</option>${laminateOptions(selectedLaminate?.id ?? null)}
         </select>
+        <div class="form-text mt-1${note ? '' : ' d-none'}" id="${noteId}">${note}</div>
       </div>
       <div class="${compact ? 'col-6' : 'col-3'}">
         <label class="form-label mb-0 small" for="pf-er${tail}">Permittivity ε<sub>r</sub></label>
-        <input type="number" min="1" step="0.01" class="form-control form-control-sm" id="pf-er${tail}" value="${er}">
+        <input type="number" min="1" step="0.01" class="form-control form-control-sm" id="pf-er${tail}" value="${materialNumber(shownEr)}"${locked}>
       </div>
       <div class="${compact ? 'col-6' : 'col-3'}">
         <label class="form-label mb-0 small" for="pf-tand${tail}">Loss Tangent</label>
-        <input type="number" min="0" step="0.001" class="form-control form-control-sm" id="pf-tand${tail}" value="${tanD}">
+        <input type="number" min="0" step="0.001" class="form-control form-control-sm" id="pf-tand${tail}" value="${materialNumber(shownTanD)}"${locked}>
       </div>
     </div>`;
   };
@@ -192,23 +221,23 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
           <div class="card-body p-2">
             <div class="fw-semibold small">Upper dielectric</div>
             <div class="row g-2">${dim('h2', 'Thickness above trace (h₂)', p.h2, 'col-12')}</div>
-            ${materialRow('upper', p.er2, p.tanD2, true)}
+            ${materialRow('upper', p.laminateId2, p.er2, p.tanD2, true)}
           </div>
         </section>
         <section class="card mt-2" id="pf-stripline-lower">
           <div class="card-body p-2">
             <div class="fw-semibold small">Lower dielectric</div>
             <div class="row g-2">${dim('h', 'Thickness below trace (h₁)', p.h, 'col-12')}</div>
-            ${materialRow('lower', p.er, p.tanD, true)}
+            ${materialRow('lower', p.laminateId, p.er, p.tanD, true)}
           </div>
         </section>` : `
         <div class="row g-2 mt-1">
           ${dim('h2', 'Dielectric Above Trace (h₂)', p.h2, 'col-6')}
           ${dim('h', 'Dielectric Below Trace (h₁)', p.h, 'col-6', primaryFieldIcon('height'))}
         </div>
-        ${materialRow('', p.er, p.tanD)}
+        ${materialRow('', p.laminateId, p.er, p.tanD)}
       `}
-    ` : materialRow('', p.er, p.tanD)}
+    ` : materialRow('', p.laminateId, p.er, p.tanD)}
 
     ${kind !== 'stripline' ? `
     <div class="mt-2">
@@ -389,48 +418,33 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     const el = container.querySelector(`#pf-${id}`) as HTMLInputElement | null;
     el?.addEventListener('change', () => apply(num(el.value, 0)));
   };
-  const syncLaminateSelect = (suffix: '' | 'upper' | 'lower', er: number, tanD: number) => {
-    const tail = suffix ? `-${suffix}` : '';
-    const select = container.querySelector(`#pf-laminate${tail}`) as HTMLSelectElement | null;
-    if (!select) return;
-    const match = LAMINATES.find((l) => Math.abs(l.er - er) < 1e-9 && Math.abs(l.tanD - tanD) < 1e-9);
-    select.value = match?.name ?? '';
-  };
   const updateSharedEr = (v: number) => {
     const er = Math.max(v, 1);
-    const cur = store.get().presetParams;
-    upd(kind === 'stripline' ? { er, er2: er } : { er });
-    syncLaminateSelect('', er, cur.tanD);
+    upd(kind === 'stripline'
+      ? { laminateId: null, laminateId2: null, er, er2: er }
+      : { laminateId: null, er });
   };
   const updateSharedTanD = (v: number) => {
     const tanD = Math.max(v, 0);
-    const cur = store.get().presetParams;
-    upd(kind === 'stripline' ? { tanD, tanD2: tanD } : { tanD });
-    syncLaminateSelect('', cur.er, tanD);
+    upd(kind === 'stripline'
+      ? { laminateId: null, laminateId2: null, tanD, tanD2: tanD }
+      : { laminateId: null, tanD });
   };
   const updateLowerEr = (v: number) => {
     const er = Math.max(v, 1);
-    const cur = store.get().presetParams;
-    upd({ er });
-    syncLaminateSelect('lower', er, cur.tanD);
+    upd({ laminateId: null, er });
   };
   const updateLowerTanD = (v: number) => {
     const tanD = Math.max(v, 0);
-    const cur = store.get().presetParams;
-    upd({ tanD });
-    syncLaminateSelect('lower', cur.er, tanD);
+    upd({ laminateId: null, tanD });
   };
   const updateUpperEr = (v: number) => {
     const er2 = Math.max(v, 1);
-    const cur = store.get().presetParams;
-    upd({ er2 });
-    syncLaminateSelect('upper', er2, cur.tanD2);
+    upd({ laminateId2: null, er2 });
   };
   const updateUpperTanD = (v: number) => {
     const tanD2 = Math.max(v, 0);
-    const cur = store.get().presetParams;
-    upd({ tanD2 });
-    syncLaminateSelect('upper', cur.er2, tanD2);
+    upd({ laminateId2: null, tanD2 });
   };
   bindNum('er', updateSharedEr);
   bindNum('tand', updateSharedTanD);
@@ -466,30 +480,39 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
 
   const bindLaminate = (
     suffix: '' | 'upper' | 'lower',
-    apply: (er: number, tanD: number) => void,
+    apply: (materialId: string | null, er: number, tanD: number) => void,
   ) => {
     const tail = suffix ? `-${suffix}` : '';
     (container.querySelector(`#pf-laminate${tail}`) as HTMLSelectElement | null)?.addEventListener('change', (e) => {
-      const lam = LAMINATES.find((l) => l.name === (e.target as HTMLSelectElement).value);
-      if (!lam) return;
-      apply(lam.er, lam.tanD);
-      const erInput = container.querySelector(`#pf-er${tail}`) as HTMLInputElement | null;
-      const tanDInput = container.querySelector(`#pf-tand${tail}`) as HTMLInputElement | null;
-      if (erInput) erInput.value = String(lam.er);
-      if (tanDInput) tanDInput.value = String(lam.tanD);
+      const selectedId = (e.target as HTMLSelectElement).value;
+      const selected = materialAtFrequency(selectedId, s.designFreqHz);
+      if (selected) {
+        apply(selected.laminate.id, selected.er, selected.tanD);
+        return;
+      }
+
+      // Switching to Custom preserves the currently displayed lookup values
+      // as the editable starting point.
+      const cur = store.get().presetParams;
+      const priorId = suffix === 'upper' ? cur.laminateId2 : cur.laminateId;
+      const prior = materialAtFrequency(priorId, s.designFreqHz);
+      const fallbackEr = suffix === 'upper' ? cur.er2 : cur.er;
+      const fallbackTanD = suffix === 'upper' ? cur.tanD2 : cur.tanD;
+      apply(null, prior?.er ?? fallbackEr, prior?.tanD ?? fallbackTanD);
     });
   };
-  bindLaminate('', (er, tanD) => upd(kind === 'stripline'
-    ? { er, tanD, er2: er, tanD2: tanD }
-    : { er, tanD }));
-  bindLaminate('lower', (er, tanD) => upd({ er, tanD }));
-  bindLaminate('upper', (er2, tanD2) => upd({ er2, tanD2 }));
+  bindLaminate('', (laminateId, er, tanD) => upd(kind === 'stripline'
+    ? { laminateId, laminateId2: laminateId, er, tanD, er2: er, tanD2: tanD }
+    : { laminateId, er, tanD }));
+  bindLaminate('lower', (laminateId, er, tanD) => upd({ laminateId, er, tanD }));
+  bindLaminate('upper', (laminateId2, er2, tanD2) => upd({ laminateId2, er2, tanD2 }));
 
   const splitMaterials = container.querySelector('#pf-stripline-split-materials') as HTMLInputElement | null;
   splitMaterials?.addEventListener('change', () => {
     const cur = store.get().presetParams;
     upd({
       striplineSeparateMaterials: splitMaterials.checked,
+      laminateId2: cur.laminateId,
       er2: cur.er,
       tanD2: cur.tanD,
     });

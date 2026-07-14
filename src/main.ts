@@ -33,7 +33,7 @@ import { computeLineStats } from './analysis/lineStats.ts';
 import {
   lossCurve,
   lossInputsFrom,
-  striplineEffectiveLossTangent,
+  presetLossTangentAtFrequency,
   UNIT_SCALE,
 } from './analysis/losses.ts';
 import type { FieldGrid } from './field/potential.ts';
@@ -44,6 +44,7 @@ import {
   type Stackup,
 } from './model/types.ts';
 import type { DimUnit } from './ui/dimField.ts';
+import type { PresetKind, PresetParams } from './model/presets.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
   const el = document.querySelector(sel);
@@ -83,6 +84,7 @@ function goalSeekHook() {
         kind: s.presetKind,
         variant: s.presetVariant,
         params: s.presetParams,
+        designFreqHz: s.designFreqHz,
         seekParam,
         mode,
         target,
@@ -131,6 +133,9 @@ function renderInputs(force = false) {
     s.presetVariant,
     s.presetParams.cover !== null,
     s.presetParams.striplineSeparateMaterials,
+    s.presetParams.laminateId,
+    s.presetParams.laminateId2,
+    s.designFreqHz,
     s.freeform.items.map((i) => i.kind + (isConductor(i) ? i.isGround : '')),
   ]);
   if (!force && sig === lastInputSignature) return;
@@ -160,6 +165,11 @@ const fieldResidual = $('#field-residual');
 let fieldGridCache: (FieldGrid & { lines: string[] }) | null = null;
 let fieldGridStale = true;
 let solvedStackup: Stackup | null = null;
+let solvedMaterialContext: {
+  kind: PresetKind;
+  params: PresetParams;
+  designFreqHz: number;
+} | null = null;
 let fieldSolveKey = '';
 let fieldGeneration = 0;
 let activeFieldRequestKey: string | null = null;
@@ -414,6 +424,9 @@ async function doSolve() {
   const generation = ++solveGeneration;
   const s = store.get();
   const stackup = currentStackup(s);
+  const materialContext = s.mode === 'preset'
+    ? { kind: s.presetKind, params: { ...s.presetParams }, designFreqHz: s.designFreqHz }
+    : null;
   const errors = validateStackup(stackup);
   if (errors.length) {
     solveNote.textContent = errors[0];
@@ -436,6 +449,7 @@ async function doSolve() {
     const out = await client.solve(xsctn, stackup.cseg, stackup.dseg);
     if (generation !== solveGeneration) return;
     solvedStackup = stackup;
+    solvedMaterialContext = materialContext;
     fieldSolveKey = '';
     fieldSolveKey = solveKey;
     (window as unknown as Record<string, unknown>).__tntweb = { out, stackup, xsctn };
@@ -553,11 +567,23 @@ function renderLoss() {
   }
   const cond = drivingConductor(solvedStackup);
   if (!cond) return;
-  const firstDielectric = solvedStackup.items.find((i) => i.kind === 'DielectricLayer');
-  let tanD = firstDielectric && firstDielectric.kind === 'DielectricLayer' ? firstDielectric.lossTangent : 0;
-  if (s.mode === 'preset' && s.presetKind === 'stripline' && s.presetParams.striplineSeparateMaterials) {
-    const p = s.presetParams;
-    tanD = striplineEffectiveLossTangent(p.er, p.h, p.tanD, p.er2, p.h2, p.tanD2);
+  const substrateId = solvedMaterialContext?.kind === 'stripline' ? 'sub1' : 'sub';
+  const substrate = solvedMaterialContext
+    ? solvedStackup.items.find(
+      (item) => item.kind === 'DielectricLayer' && item.id === substrateId,
+    )
+    : solvedStackup.items.find((item) => item.kind === 'DielectricLayer');
+  let tanD = substrate?.kind === 'DielectricLayer' ? substrate.lossTangent : 0;
+  let tanDAtHz: ((fHz: number) => number) | undefined;
+  if (solvedMaterialContext) {
+    const { kind, params: p, designFreqHz } = solvedMaterialContext;
+    if (kind === 'stripline' && p.striplineSeparateMaterials) {
+      tanDAtHz = (fHz) => presetLossTangentAtFrequency(kind, p, fHz);
+      tanD = tanDAtHz(designFreqHz);
+    } else if (p.laminateId) {
+      tanDAtHz = (fHz) => presetLossTangentAtFrequency(kind, p, fHz);
+      tanD = tanDAtHz(designFreqHz);
+    }
   }
   const diffMode = out.result.nSignals === 2 && out.result.zOdd != null;
   const inputs = lossInputsFrom(out.result, cond, UNIT_SCALE[solvedStackup.units], tanD, diffMode);
@@ -565,6 +591,7 @@ function renderLoss() {
     note.textContent = 'no loss inputs';
     return;
   }
+  if (tanDAtHz) inputs.tanDAtHz = tanDAtHz;
   const curve = lossCurve(inputs, s.lossParams);
   const modeLabel =
     diffMode ? 'odd mode, per line' : (s.mode === 'freeform' ? (out.result.names[0] ?? 'line 1') : 'single-ended');

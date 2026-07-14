@@ -11,10 +11,15 @@ const {
   lossCurve,
   lossInputsFrom,
   perimeterM,
+  presetLossTangentAtFrequency,
   roughnessK,
   skinDepthM,
   striplineEffectiveLossTangent,
 } = await import(pathToFileURL(join(root, 'src/analysis/losses.ts')));
+const { defaultParams } = await import(pathToFileURL(join(root, 'src/model/presets.ts')));
+const { JLCPCB_LAMINATES, materialAtFrequency } = await import(
+  pathToFileURL(join(root, 'src/model/materials.ts'))
+);
 
 const MU0 = 4e-7 * Math.PI;
 const NP_TO_DB = 8.685889638;
@@ -64,6 +69,72 @@ test('lossCurve follows the analytic W-element formulas', () => {
     assertNear(curve.alphaD[i], alphaD, `dielectric attenuation ${i}`);
     assertNear(curve.alphaTotal[i], alphaC + alphaD, `total attenuation ${i}`);
   }
+});
+
+test('lossCurve evaluates frequency-dependent loss tangent at every curve point', () => {
+  const seen = [];
+  const inputs = {
+    z0: 50,
+    cPerM: 100e-12,
+    rdcPerM: 0,
+    sigma: 5.8e7,
+    tanD: 0.99,
+    tanDAtHz: (fHz) => {
+      seen.push(fHz);
+      return 0.001 * (Math.log10(fHz) - 5);
+    },
+    perimeterM: 1e-3,
+  };
+  const curve = lossCurve(inputs, {
+    roughnessModel: 'none',
+    roughnessRqUm: 0,
+    hurayRatio: 2.17,
+    fMinHz: 1e6,
+    fMaxHz: 1e8,
+    nPoints: 3,
+  });
+
+  assert.deepEqual(curve.fHz, [1e6, 1e7, 1e8]);
+  assert.deepEqual(seen, curve.fHz);
+  for (let i = 0; i < curve.fHz.length; i++) {
+    const fHz = curve.fHz[i];
+    const tanD = 0.001 * (i + 1);
+    const conductance = 2 * Math.PI * fHz * inputs.cPerM * tanD;
+    const alphaD = ((conductance * inputs.z0) / 2) * NP_TO_DB;
+    assertNear(curve.gSPerM[i], conductance, `dispersive conductance ${i}`);
+    assertNear(curve.alphaD[i], alphaD, `dispersive dielectric attenuation ${i}`);
+  }
+});
+
+test('preset material interpolation drives the plotted IL loss-tangent callback', () => {
+  const [np155f, s1000] = JLCPCB_LAMINATES;
+  const p = {
+    ...defaultParams('microstrip', 'se'),
+    laminateId: np155f.id,
+  };
+  assert.equal(presetLossTangentAtFrequency('microstrip', p, 1e9), 0.014);
+  assert.equal(presetLossTangentAtFrequency('microstrip', p, 5e9), 0.016);
+  assert.equal(presetLossTangentAtFrequency('microstrip', p, 100e9), 0.017);
+
+  const split = {
+    ...defaultParams('stripline', 'se'),
+    striplineSeparateMaterials: true,
+    laminateId: np155f.id,
+    laminateId2: s1000.id,
+    h: 10,
+    h2: 6,
+  };
+  const lower = materialAtFrequency(np155f.id, 5e9);
+  const upper = materialAtFrequency(s1000.id, 5e9);
+  const expected = striplineEffectiveLossTangent(
+    lower.er, split.h, lower.tanD,
+    upper.er, split.h2, upper.tanD,
+  );
+  assertNear(
+    presetLossTangentAtFrequency('stripline', split, 5e9),
+    expected,
+    'split-stripline dispersive tanD',
+  );
 });
 
 test('surface roughness multipliers and skin depth retain their closed forms', () => {

@@ -12,6 +12,7 @@ import {
   type PresetParams,
   type PresetVariant,
 } from './presets.ts';
+import { laminateById } from './materials.ts';
 
 export type InputMode = 'preset' | 'freeform';
 export type DisplayUnit = 'mils' | 'mm' | 'um' | 'inch';
@@ -86,9 +87,14 @@ export function encodeConfig(s: AppState): string {
     q.set('var', s.presetVariant);
     const defs = defaultParams(s.presetKind, s.presetVariant);
     const p = s.presetParams;
+    if (p.laminateId && laminateById(p.laminateId)) q.set('mat', p.laminateId);
+    if (s.presetKind === 'stripline' && p.striplineSeparateMaterials &&
+        p.laminateId2 && laminateById(p.laminateId2)) q.set('mat2', p.laminateId2);
     for (const [key, field] of NUM_PARAMS) {
       if ((field === 'er2' || field === 'tanD2') &&
           (s.presetKind !== 'stripline' || !p.striplineSeparateMaterials)) continue;
+      if ((field === 'er' || field === 'tanD') && p.laminateId) continue;
+      if ((field === 'er2' || field === 'tanD2') && p.laminateId2) continue;
       const v = p[field] as number;
       if (Number.isFinite(v) && v !== (defs[field] as number)) q.set(key, String(+v.toPrecision(6)));
     }
@@ -147,6 +153,8 @@ export function decodeHash(hash: string): Partial<AppState> | null {
       out.presetKind = kind;
       out.presetVariant = variant;
       const p = defaultParams(kind, variant);
+      p.laminateId = laminateById(q.get('mat'))?.id ?? null;
+      p.laminateId2 = laminateById(q.get('mat2'))?.id ?? null;
       for (const [key, field] of NUM_PARAMS) {
         const v = num(key);
         if (v !== null) (p[field] as number) = v;
@@ -155,6 +163,7 @@ export function decodeHash(hash: string): Partial<AppState> | null {
       if (p.striplineSeparateMaterials) {
         if (!q.has('er2')) p.er2 = p.er;
         if (!q.has('tand2')) p.tanD2 = p.tanD;
+        if (!q.has('mat2') && !q.has('er2') && !q.has('tand2')) p.laminateId2 = p.laminateId;
       }
       const etchDelta = num('etch_delta');
       if (etchDelta !== null) p.etch = Math.max(0, etchDelta);
@@ -207,9 +216,18 @@ function mergeOverDefaults(saved: Partial<AppState>): AppState {
   const positive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
   const lineLengthM = positive(saved.lineLengthM) ? saved.lineLengthM : d.lineLengthM;
   const riseTimePs = positive(saved.riseTimePs) ? saved.riseTimePs : d.riseTimePs;
+  const savedPreset = saved.presetParams as (Partial<PresetParams> | undefined);
+  const hasSavedMaterial = !!savedPreset && Object.prototype.hasOwnProperty.call(savedPreset, 'laminateId');
+  const hasSavedMaterial2 = !!savedPreset && Object.prototype.hasOwnProperty.call(savedPreset, 'laminateId2');
   const presetParams = {
     ...d.presetParams,
-    ...(saved.presetParams ?? {}),
+    ...(savedPreset ?? {}),
+    laminateId: hasSavedMaterial && laminateById(savedPreset?.laminateId)?.id
+      ? laminateById(savedPreset?.laminateId)?.id ?? null
+      : null,
+    laminateId2: hasSavedMaterial2 && laminateById(savedPreset?.laminateId2)?.id
+      ? laminateById(savedPreset?.laminateId2)?.id ?? null
+      : null,
     couplingLengthM: lineLengthM,
     riseTimePs,
   };
@@ -236,7 +254,7 @@ function mergeOverDefaults(saved: Partial<AppState>): AppState {
 
 export function currentStackup(s: AppState): Stackup {
   const stackup = s.mode === 'preset'
-    ? buildPreset(s.presetKind, s.presetVariant, s.presetParams)
+    ? buildPreset(s.presetKind, s.presetVariant, s.presetParams, s.designFreqHz)
     : s.freeform;
   // The native file format still requires these fields on Stackup.  Always
   // inject the canonical app settings at this boundary as a final safeguard.

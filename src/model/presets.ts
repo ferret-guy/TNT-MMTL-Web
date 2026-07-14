@@ -25,6 +25,7 @@ import type {
   TrapezoidConductorsItem,
   TrapezoidDielectricItem,
 } from './types.ts';
+import { materialAtFrequency } from './materials.ts';
 
 export type PresetKind = 'microstrip' | 'stripline' | 'cpw';
 export type PresetVariant = 'se' | 'diff';
@@ -75,9 +76,12 @@ export interface PresetParams {
   h: number;
   /** stripline only: allow the upper dielectric to use a different material */
   striplineSeparateMaterials: boolean;
+  /** Selected laminate; null means the manual er/tanD fallback is active. */
+  laminateId: string | null;
   er: number;
   tanD: number;
   /** stripline upper-dielectric material (used when striplineSeparateMaterials is true) */
+  laminateId2: string | null;
   er2: number;
   tanD2: number;
   /** conductor conductivity S/m */
@@ -108,8 +112,10 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     etch: 0.5, // JLC outer-layer default: W1 - W2 = 0.5 mil total
     h: 6,
     striplineSeparateMaterials: false,
+    laminateId: 'fr402',
     er: 4.27, // FR402
     tanD: 0.016,
+    laminateId2: 'fr402',
     er2: 4.27,
     tanD2: 0.016,
     sigma: 5.0e7, // copper
@@ -145,6 +151,22 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
 /** Realizable total etch reduction, limited so the top keeps >= 20% of w. */
 export function etchReductionOf(w: number, etch: number): number {
   return Math.min(Math.max(etch, 0), 0.8 * Math.max(w, 0));
+}
+
+/** Return a copy with selected laminate properties resolved at the solve frequency. */
+export function resolvePresetMaterials(p: PresetParams, designFreqHz: number): PresetParams {
+  const resolved = { ...p };
+  const lower = materialAtFrequency(p.laminateId, designFreqHz);
+  if (lower) {
+    resolved.er = lower.er;
+    resolved.tanD = lower.tanD;
+  }
+  const upper = materialAtFrequency(p.laminateId2, designFreqHz);
+  if (upper) {
+    resolved.er2 = upper.er;
+    resolved.tanD2 = upper.tanD;
+  }
+  return resolved;
 }
 
 /** Top width from the canonical total etch reduction. */
@@ -188,7 +210,9 @@ export function buildPreset(
   kind: PresetKind,
   variant: PresetVariant,
   p: PresetParams,
+  designFreqHz = 1e9,
 ): Stackup {
+  p = resolvePresetMaterials(p, designFreqHz);
   const n = variant === 'diff' ? 2 : 1;
   const items: StackupItem[] = [];
 

@@ -239,7 +239,8 @@ const near = (a, b, relPct) => Math.abs(a - b) <= (Math.abs(b) * relPct) / 100;
   let iters = 0;
   const res = await runGoalSeek(
     {
-      kind: 'microstrip', variant: 'se', params, seekParam: 'w', mode: 'z0', target: 50,
+      kind: 'microstrip', variant: 'se', params, designFreqHz: 1e9,
+      seekParam: 'w', mode: 'z0', target: 50,
       tolOhms: 0.25, maxIter: 24, coarseCseg: 10,
     },
     solve,

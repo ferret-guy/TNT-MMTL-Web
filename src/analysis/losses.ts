@@ -18,6 +18,8 @@
  */
 import type { LossParams, SolveResult } from '../model/types.ts';
 import type { ConductorItem } from '../model/types.ts';
+import { materialAtFrequency } from '../model/materials.ts';
+import type { PresetKind, PresetParams } from '../model/presets.ts';
 
 const MU0 = 4e-7 * Math.PI;
 
@@ -74,7 +76,10 @@ export interface LossInputs {
   cPerM: number; // F/m (mode capacitance)
   rdcPerM: number; // ohm/m
   sigma: number; // S/m
+  /** Design-frequency/custom fallback. */
   tanD: number;
+  /** Optional dispersive material lookup, evaluated at every plot point. */
+  tanDAtHz?: (fHz: number) => number;
   perimeterM: number;
 }
 
@@ -97,6 +102,25 @@ export function striplineEffectiveLossTangent(
   return totalWeight > 0
     ? (lowerWeight * lowerTanD + upperWeight * upperTanD) / totalWeight
     : 0;
+}
+
+/** Material-model tan δ used by the plotted IL curve at each frequency. */
+export function presetLossTangentAtFrequency(
+  kind: PresetKind,
+  p: PresetParams,
+  fHz: number,
+): number {
+  const at = (id: string | null, er: number, tanD: number) => {
+    const material = materialAtFrequency(id, fHz);
+    return material ? { er: material.er, tanD: material.tanD } : { er, tanD };
+  };
+  const lower = at(p.laminateId, p.er, p.tanD);
+  if (kind !== 'stripline' || !p.striplineSeparateMaterials) return lower.tanD;
+  const upper = at(p.laminateId2, p.er2, p.tanD2);
+  return striplineEffectiveLossTangent(
+    lower.er, p.h, lower.tanD,
+    upper.er, p.h2, upper.tanD,
+  );
 }
 
 const NP_TO_DB = 8.685889638;
@@ -122,7 +146,11 @@ export function lossCurve(inp: LossInputs, p: LossParams): LossCurve {
     const k = roughnessK(p.roughnessModel, rqM, delta, p.hurayRatio);
     const rSkin = Math.sqrt(Math.PI * f * MU0 / inp.sigma) / inp.perimeterM;
     const r = Math.sqrt(inp.rdcPerM ** 2 + (k * rSkin) ** 2);
-    const g = 2 * Math.PI * f * inp.cPerM * inp.tanD;
+    const lookedUpTanD = inp.tanDAtHz?.(f);
+    const tanD = Number.isFinite(lookedUpTanD) && lookedUpTanD! >= 0
+      ? lookedUpTanD!
+      : inp.tanD;
+    const g = 2 * Math.PI * f * inp.cPerM * tanD;
     const aC = (r / (2 * inp.z0)) * NP_TO_DB;
     const aD = ((g * inp.z0) / 2) * NP_TO_DB;
     out.fHz.push(f);

@@ -22,6 +22,7 @@ export interface GoalSeekSpec {
   kind: PresetKind;
   variant: PresetVariant;
   params: PresetParams;
+  designFreqHz: number;
   seekParam: SeekParam;
   mode: SeekMode;
   target: number;
@@ -83,7 +84,7 @@ export async function runGoalSeek(
     const params: PresetParams = { ...p0 };
     if (spec.seekParam === 'w') params.w = x;
     else params.s = x;
-    const stackup = buildPreset(spec.kind, spec.variant, params);
+    const stackup = buildPreset(spec.kind, spec.variant, params, spec.designFreqHz);
     const out = await solve({
       xsctn: generateXsctn(stackup),
       cseg: stackup.cseg,
