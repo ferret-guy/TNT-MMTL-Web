@@ -91,11 +91,6 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     dimFieldHtml({ id: `pf-${id}`, label, mils, unit, min: 0.01, colClass, prefixHtml });
 
   const materialNumber = (value: number) => String(+value.toPrecision(5));
-  const frequencyLabel = (fHz: number) => fHz >= 1e9
-    ? `${+(fHz / 1e9).toPrecision(4)} GHz`
-    : fHz >= 1e6
-      ? `${+(fHz / 1e6).toPrecision(4)} MHz`
-      : `${+(fHz / 1e3).toPrecision(4)} kHz`;
   const laminateOptions = (selectedId: string | null) => LAMINATES.map((laminate) => {
     const atFrequency = materialAtFrequency(laminate, s.designFreqHz)!;
     return `<option value="${laminate.id}" ${laminate.id === selectedId ? 'selected' : ''}>${laminate.name} (εr ${materialNumber(atFrequency.er)}, tan δ ${materialNumber(atFrequency.tanD)})</option>`;
@@ -113,15 +108,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     const shownEr = resolved?.er ?? er;
     const shownTanD = resolved?.tanD ?? tanD;
     const noteId = `pf-laminate-note${tail}`;
-    const clampNote = resolved?.clamped === 'low'
-      ? ' Values are clamped to the lowest characterized frequency.'
-      : resolved?.clamped === 'high'
-        ? ' Values are clamped to the highest characterized frequency.'
-        : '';
-    const lookupNote = selectedLaminate
-      ? `Lookup at ${frequencyLabel(s.designFreqHz)}: εr ${materialNumber(shownEr)}, tan δ ${materialNumber(shownTanD)}.${clampNote}`
-      : '';
-    const note = [selectedLaminate?.note, lookupNote].filter(Boolean).join(' ');
+    const note = selectedLaminate?.note ?? '';
     const locked = selectedLaminate ? ' disabled aria-disabled="true"' : '';
     return `<div class="row g-2 ${compact ? 'mt-1' : 'mt-1'}">
       <div class="${compact ? 'col-12' : 'col-6'}">

@@ -32,7 +32,7 @@ test('laminates have stable unique IDs and JLC presets carry frequency samples',
   }
   for (const laminate of JLCPCB_LAMINATES) {
     assert.ok(laminate.samples.length >= 2, `${laminate.id} needs a dispersive lookup`);
-    assert.match(laminate.note ?? '', /JLC/i);
+    assert.equal(laminate.note, 'Interpolated from vendor data');
     for (let i = 0; i < laminate.samples.length; i++) {
       const sample = laminate.samples[i];
       assert.ok(Number.isFinite(sample.fHz) && sample.fHz > 0);

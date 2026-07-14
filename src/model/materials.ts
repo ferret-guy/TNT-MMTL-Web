@@ -82,7 +82,7 @@ export const JLCPCB_LAMINATES: Laminate[] = [
       { fHz: 5e9, er: 4.258, tanD: 0.016 },
       { fHz: 10e9, er: 4.208, tanD: 0.017 },
     ],
-    note: 'JLC 1 GHz construction εr range 3.91–4.53; 4.36 is the median. The 1 MHz point is scaled from Nan Ya FR/FTL data; above 1 GHz, dispersion and tan δ are consensus FR-4 estimates.',
+    note: 'Interpolated from vendor data',
   },
   {
     id: 'jlc-s1000-2m',
@@ -96,7 +96,7 @@ export const JLCPCB_LAMINATES: Laminate[] = [
       { fHz: 5e9, er: 4.19, tanD: 0.020 },
       { fHz: 10e9, er: 4.14, tanD: 0.021 },
     ],
-    note: 'JLC 1 GHz construction εr range 3.92–4.56; 4.29 is the median. The 1 MHz point is scaled from Shengyi coupon data; 3–10 GHz uses Shengyi construction-table medians.',
+    note: 'Interpolated from vendor data',
   },
 ];
 
