@@ -32,6 +32,23 @@ export interface RectangleDielectricItem {
   yOffset: number;
 }
 
+/**
+ * A dielectric trapezoid whose top and bottom edges are horizontal.
+ * `xOffset` is the left edge of the wider of the two edges; the narrower
+ * edge is centered in that bounding width. `yOffset` is measured from the
+ * current dielectric-layer stack top.
+ */
+export interface TrapezoidDielectricItem {
+  kind: 'TrapezoidDielectric';
+  id: string;
+  topWidth: number;
+  bottomWidth: number;
+  height: number;
+  permittivity: number;
+  xOffset: number;
+  yOffset: number;
+}
+
 interface ConductorCommon {
   id: string;
   /** emitted with a 'gr' name prefix => solver treats as ground wires */
@@ -70,6 +87,7 @@ export type StackupItem =
   | GroundPlaneItem
   | DielectricLayerItem
   | RectangleDielectricItem
+  | TrapezoidDielectricItem
   | ConductorItem;
 
 export interface Stackup {

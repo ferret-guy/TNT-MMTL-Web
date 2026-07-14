@@ -135,7 +135,6 @@ export function streamlinePaths(
   const { nx, ny, phi } = grid;
   const lo = grid.phiMin;
   const span = grid.phiMax - grid.phiMin || 1;
-  const norm = (v: number) => (v - lo) / span;
 
   /** bilinear phi in grid coords; NaN if any corner is masked */
   const sample = (x: number, y: number): number => {
@@ -202,8 +201,14 @@ export function streamlinePaths(
   const mx = seeds.reduce((a, s) => a + s[0], 0) / seeds.length;
   const my = seeds.reduce((a, s) => a + s[1], 0) / seeds.length;
   seeds.sort((a, b) => Math.atan2(a[1] - my, a[0] - mx) - Math.atan2(b[1] - my, b[0] - mx));
-  const stride = Math.max(1, Math.floor(seeds.length / nSeeds));
-  const chosen = seeds.filter((_, k) => k % stride === 0);
+  // Pick an exact, evenly distributed subset.  A stride of floor(N / limit)
+  // selected every seed for N just under 2*limit, crowding one part of a
+  // CPW ring and making the remaining field look empty.
+  const chosenCount = Math.min(nSeeds, seeds.length);
+  const chosen = Array.from(
+    { length: chosenCount },
+    (_, k) => seeds[Math.floor((k * seeds.length) / chosenCount)],
+  );
 
   // grid coords -> svg coords
   const toSvg = (x: number, y: number): [number, number] => [
@@ -212,7 +217,17 @@ export function streamlinePaths(
   ];
 
   const aspect = grid.dy / grid.dx; // physical anisotropy of grid cells
-  const stopLo = 0.005;
+
+  /** Clip the first out-of-grid step to the visible grid boundary so a line
+   *  that goes to the far field meets the edge of the image exactly. */
+  const snapToGridBoundary = (x0: number, y0: number, x1: number, y1: number): [number, number] => {
+    let f = 1;
+    if (x1 < 0) f = Math.min(f, (0 - x0) / (x1 - x0));
+    if (x1 > nx - 1) f = Math.min(f, (nx - 1 - x0) / (x1 - x0));
+    if (y1 < 0) f = Math.min(f, (0 - y0) / (y1 - y0));
+    if (y1 > ny - 1) f = Math.min(f, (ny - 1 - y0) / (y1 - y0));
+    return [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f];
+  };
 
   /** integrate from a point along +/-E; returns grid-coordinate polyline
    *  ending exactly on the terminating boundary */
@@ -223,8 +238,6 @@ export function streamlinePaths(
     for (let step = 0; step < 6000; step++) {
       const v = sample(x, y);
       if (!Number.isFinite(v)) break;
-      if (sign > 0 && norm(v) < stopLo) break; // reached ground potential
-      if (sign < 0 && norm(v) > 0.999) break; // reached the driven surface
       const [gx, gy] = grad(x, y);
       if (!Number.isFinite(gx) || !Number.isFinite(gy)) break;
       let ex = -sign * gx / grid.dx;
@@ -243,7 +256,7 @@ export function streamlinePaths(
       const xN = x + ex;
       const yN = y + ey;
       if (xN < 0 || yN < 0 || xN > nx - 1 || yN > ny - 1) {
-        pts.push([xN, yN]);
+        pts.push(snapToGridBoundary(x, y, xN, yN));
         break;
       }
       if (!Number.isFinite(sample(xN, yN))) {

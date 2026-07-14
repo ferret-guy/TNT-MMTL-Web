@@ -22,8 +22,10 @@ cd src
 cp f2c.h0 f2c.h
 
 # arith.h for wasm32: build arithchk with emcc, run under node
-emcc -O0 -DNO_LONG_LONG -DNO_FPINIT arithchk.c -o arithchk.mjs
-node arithchk.mjs > arith.h
+emcc -O0 -DNO_LONG_LONG -DNO_FPINIT arithchk.c -sEXIT_RUNTIME=1 -o arithchk.mjs
+# A .mjs output is an ES module factory in pinned Emscripten 3.1.61; merely
+# executing the file defines the factory but never runs arithchk's main().
+node -e "import('./arithchk.mjs').then((module) => module.default())" > arith.h
 echo "-- arith.h:"; cat arith.h
 
 # signal1.h wanted by some members

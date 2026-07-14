@@ -669,6 +669,7 @@ int nmmtl_parse_graphic(char *filename,
 	d_temp = (struct dielectric *)malloc(sizeof(struct dielectric));
 	d_temp->constant = 0.0; /* flag if none found */
 	d_temp->tangent = 0.0;	/* flag if none found */
+	d_temp->primitive = RECTANGLE;
 	
 	/* primitive attributes may follow */
 	if( ! strncmp(fgets(line,GPGE_MAX,in),"\t\t$ATT;", 7))
@@ -686,6 +687,8 @@ int nmmtl_parse_graphic(char *filename,
 	/* ensure (x1,y1) are upper right coords */
 	if (d_temp->x1 < d_temp->x0)
 	{ t0 = d_temp->x0;  d_temp->x0 = d_temp->x1;  d_temp->x1 = t0; }
+	d_temp->top_x0 = d_temp->x0;
+	d_temp->top_x1 = d_temp->x1;
 	
 #ifdef CHECK_SCALE
 	if (check_scale(local_scale, &global_scale,
@@ -3148,7 +3151,6 @@ static int fill_dielectric(struct dielectric *node,char *line,
   
   return(SUCCESS);
 }
-
 
 
 

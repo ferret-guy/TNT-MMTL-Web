@@ -120,6 +120,7 @@ int
 			  struct dielectric_sub_segments **bottom_seg,
 			  struct dielectric_sub_segments **left_seg,
 			  struct dielectric_sub_segments **right_seg,
+			  struct dielectric_segments **sloped_segments,
 			  SORTED_GND_DIE_LIST_P *lower_sorted_gdl,
 			  SORTED_GND_DIE_LIST_P *upper_sorted_gdl)
 {
@@ -143,8 +144,10 @@ int
       new_seg->next = *top_seg;
       *top_seg = new_seg;
       new_seg->at = dielectrics->y1;
-      new_seg->start = dielectrics->x0;
-      new_seg->end = dielectrics->x1;
+      new_seg->start = dielectrics->primitive == POLYGON ?
+        dielectrics->top_x0 : dielectrics->x0;
+      new_seg->end = dielectrics->primitive == POLYGON ?
+        dielectrics->top_x1 : dielectrics->x1;
       new_seg->divisions = plane_segments;
       new_seg->epsilon = dielectrics->constant;
 #ifdef DIAG_SUBSEG
@@ -177,8 +180,41 @@ int
 #endif      
     }
     
+    /* Sloped trapezoid sides are real dielectric interfaces.  Direction is
+       chosen so the left normal points into the dielectric (epsilonplus). */
+    if(dielectrics->primitive == POLYGON)
+    {
+      DIELECTRIC_SEGMENTS_P side;
+      double dx, dy;
+
+      side = (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+      side->next = *sloped_segments; *sloped_segments = side;
+      side->orientation = GENERAL_ORIENTATION;
+      side->x0 = dielectrics->x1; side->y0 = dielectrics->y0;
+      side->x1 = dielectrics->top_x1; side->y1 = dielectrics->y1;
+      dx = side->x1-side->x0; dy = side->y1-side->y0;
+      side->length = sqrt(dx*dx+dy*dy);
+      side->epsilonplus = dielectrics->constant;
+      side->epsilonminus = AIR_CONSTANT;
+      side->divisions = plane_segments;
+      side->segment_number = 0; side->end_in_conductor = 0;
+      side->at = side->start = side->end = 0.0;
+
+      side = (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+      side->next = *sloped_segments; *sloped_segments = side;
+      side->orientation = GENERAL_ORIENTATION;
+      side->x0 = dielectrics->top_x0; side->y0 = dielectrics->y1;
+      side->x1 = dielectrics->x0; side->y1 = dielectrics->y0;
+      dx = side->x1-side->x0; dy = side->y1-side->y0;
+      side->length = sqrt(dx*dx+dy*dy);
+      side->epsilonplus = dielectrics->constant;
+      side->epsilonminus = AIR_CONSTANT;
+      side->divisions = plane_segments;
+      side->segment_number = 0; side->end_in_conductor = 0;
+      side->at = side->start = side->end = 0.0;
+    }
     /* new right segment */
-    if(dielectrics->x1 < right_of_gnd_planes)
+    else if(dielectrics->x1 < right_of_gnd_planes)
     {
       new_seg = (struct dielectric_sub_segments *)
 	malloc(sizeof(struct dielectric_sub_segments));
@@ -197,7 +233,7 @@ int
     
     
     /* new left segment */
-    if(dielectrics->x0 > left_of_gnd_planes)
+    if(dielectrics->primitive != POLYGON && dielectrics->x0 > left_of_gnd_planes)
     {
       new_seg = (struct dielectric_sub_segments *)
 	malloc(sizeof(struct dielectric_sub_segments));

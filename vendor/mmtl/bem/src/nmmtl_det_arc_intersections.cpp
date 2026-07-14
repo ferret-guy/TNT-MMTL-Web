@@ -27,6 +27,397 @@
 
 #include "nmmtl.h"
 
+#include <algorithm>
+#include <vector>
+
+/*
+ * Dielectric interfaces used to be axis aligned, so this module historically
+ * edited them by assigning either start/end x or start/end y.  Trapezoid
+ * dielectric sides use explicit endpoints instead.  Keep the intersection
+ * topology below, but route every endpoint edit and length calculation through
+ * these helpers so a segment can have any orientation.
+ */
+static void nmmtl_arc_die_set_start(DIELECTRIC_SEGMENTS_P seg,
+                                    const POINT_P point)
+{
+  if(seg->orientation == GENERAL_ORIENTATION) {
+    seg->x0 = point->x;
+    seg->y0 = point->y;
+  } else if(seg->orientation == VERTICAL_ORIENTATION) {
+    seg->start = point->y;
+  } else {
+    seg->start = point->x;
+  }
+}
+
+static void nmmtl_arc_die_set_end(DIELECTRIC_SEGMENTS_P seg,
+                                  const POINT_P point)
+{
+  if(seg->orientation == GENERAL_ORIENTATION) {
+    seg->x1 = point->x;
+    seg->y1 = point->y;
+  } else if(seg->orientation == VERTICAL_ORIENTATION) {
+    seg->end = point->y;
+  } else {
+    seg->end = point->x;
+  }
+}
+
+static double nmmtl_arc_die_length(const DIELECTRIC_SEGMENTS_P seg)
+{
+  double x0, y0, x1, y1;
+  nmmtl_die_seg_endpoints(seg, &x0, &y0, &x1, &y1);
+  return hypot(x1 - x0, y1 - y0);
+}
+
+static int nmmtl_arc_points_equal(const POINT_P a, const POINT_P b,
+                                  double scale)
+{
+  double coordinate_scale = fabs(a->x);
+  if(fabs(a->y) > coordinate_scale) coordinate_scale = fabs(a->y);
+  if(fabs(b->x) > coordinate_scale) coordinate_scale = fabs(b->x);
+  if(fabs(b->y) > coordinate_scale) coordinate_scale = fabs(b->y);
+  if(scale > coordinate_scale) coordinate_scale = scale;
+  if(coordinate_scale < 1.0e-30) coordinate_scale = 1.0e-30;
+  const double tolerance = 512.0 * DBL_EPSILON * coordinate_scale;
+  return hypot(a->x - b->x, a->y - b->y) <= tolerance;
+}
+
+static int nmmtl_arc_cirseg_endpoint(CIRCLE_SEGMENTS_P seg, POINT_P point)
+{
+  POINT endpoint;
+  nmmtl_cirseg_angle_point(seg, seg->startangle,
+                           &endpoint.x, &endpoint.y);
+  if(nmmtl_arc_points_equal(point, &endpoint, seg->radius))
+    return(INITIAL_ENDPOINT);
+  nmmtl_cirseg_angle_point(seg, seg->endangle,
+                           &endpoint.x, &endpoint.y);
+  if(nmmtl_arc_points_equal(point, &endpoint, seg->radius))
+    return(TERMINAL_ENDPOINT);
+  return(NO_ENDPOINT);
+}
+
+/*
+ * The legacy arc/interface routine below is a topology state machine written
+ * for horizontal and vertical dielectric segments.  Once one genuinely
+ * sloped interface is present, process all circle/interface intersections in
+ * one analytic pass instead.  This prevents a newly split arc from being fed
+ * back through a later interface and avoids zero/infinite arc fragments.
+ */
+struct NMMTL_GENERAL_CIRCLE
+{
+  double centerx, centery, radius;
+  int divisions, conductor;
+};
+
+static const double NMMTL_GENERAL_PARAM_TOL = 1.0e-10;
+static const double NMMTL_GENERAL_ANGLE_TOL = 1.0e-10;
+
+static void nmmtl_general_free_circles(CIRCLE_SEGMENTS_P head)
+{
+  while(head != NULL) {
+    CIRCLE_SEGMENTS_P next = head->next;
+    free(head);
+    head = next;
+  }
+}
+
+static void nmmtl_general_free_dielectrics(DIELECTRIC_SEGMENTS_P head)
+{
+  while(head != NULL) {
+    DIELECTRIC_SEGMENTS_P next = head->next;
+    free(head);
+    head = next;
+  }
+}
+
+static void nmmtl_general_segment_circle_roots(
+  double x0, double y0, double x1, double y1,
+  const NMMTL_GENERAL_CIRCLE &circle, std::vector<double> *roots)
+{
+  const double dx = x1 - x0;
+  const double dy = y1 - y0;
+  const double fx = x0 - circle.centerx;
+  const double fy = y0 - circle.centery;
+  const double a = dx * dx + dy * dy;
+  if(a <= DBL_MIN) return;
+
+  const double b = 2.0 * (fx * dx + fy * dy);
+  const double c = fx * fx + fy * fy - circle.radius * circle.radius;
+  double discriminant = b * b - 4.0 * a * c;
+  const double scale = fabs(b * b) + fabs(4.0 * a * c) +
+    a * circle.radius * circle.radius;
+  const double discriminant_tolerance =
+    1024.0 * DBL_EPSILON * (scale > DBL_MIN ? scale : DBL_MIN);
+  if(discriminant < -discriminant_tolerance) return;
+  if(fabs(discriminant) <= discriminant_tolerance) discriminant = 0.0;
+
+  const double root = sqrt(discriminant > 0.0 ? discriminant : 0.0);
+  double candidates[2];
+  int count;
+  if(discriminant == 0.0) {
+    candidates[0] = -b / (2.0 * a);
+    count = 1;
+  } else {
+    /* q-form avoids losing the near root when |b| ~= sqrt(discriminant). */
+    const double q = -0.5 * (b + copysign(root, b));
+    if(fabs(q) > DBL_MIN) {
+      candidates[0] = q / a;
+      candidates[1] = c / q;
+    } else {
+      candidates[0] = (-b - root) / (2.0 * a);
+      candidates[1] = (-b + root) / (2.0 * a);
+    }
+    count = 2;
+  }
+  for(int i = 0; i < count; ++i) {
+    double t = candidates[i];
+    if(t < -NMMTL_GENERAL_PARAM_TOL ||
+       t > 1.0 + NMMTL_GENERAL_PARAM_TOL) continue;
+    /* Snap endpoint-near roots to the endpoint.  Besides removing numerical
+       slivers, this preserves the 0/1 anchors when sorted de-duplication sees
+       a root immediately before 1. */
+    if(t <= NMMTL_GENERAL_PARAM_TOL) t = 0.0;
+    if(t >= 1.0 - NMMTL_GENERAL_PARAM_TOL) t = 1.0;
+    roots->push_back(t);
+  }
+}
+
+static void nmmtl_general_sort_unique(std::vector<double> *values,
+                                      double tolerance)
+{
+  std::sort(values->begin(), values->end());
+  std::vector<double> unique;
+  unique.reserve(values->size());
+  for(std::vector<double>::const_iterator it = values->begin();
+      it != values->end(); ++it) {
+    if(unique.empty() || fabs(*it - unique.back()) > tolerance)
+      unique.push_back(*it);
+  }
+  values->swap(unique);
+}
+
+static double nmmtl_general_angle(double x, double y,
+                                  const NMMTL_GENERAL_CIRCLE &circle)
+{
+  double angle = atan2(y - circle.centery, x - circle.centerx);
+  if(angle < 0.0) angle += 2.0 * PI;
+  if(angle >= 2.0 * PI - NMMTL_GENERAL_ANGLE_TOL) angle = 0.0;
+  return angle;
+}
+
+static int nmmtl_general_point_in_dielectric(DIELECTRICS_P dielectric,
+                                             double x, double y)
+{
+  const double scale = fabs(x) + fabs(y) + fabs(dielectric->x0) +
+    fabs(dielectric->x1) + fabs(dielectric->y0) +
+    fabs(dielectric->y1) + 1.0;
+  const double tolerance = 128.0 * DBL_EPSILON * scale;
+  if(y < dielectric->y0 - tolerance || y > dielectric->y1 + tolerance)
+    return(FALSE);
+
+  double left = dielectric->x0;
+  double right = dielectric->x1;
+  if(dielectric->primitive == POLYGON) {
+    const double height = dielectric->y1 - dielectric->y0;
+    const double fraction = fabs(height) <= DBL_MIN ? 0.0 :
+      (y - dielectric->y0) / height;
+    left += fraction * (dielectric->top_x0 - dielectric->x0);
+    right += fraction * (dielectric->top_x1 - dielectric->x1);
+  }
+  return(x >= left - tolerance && x <= right + tolerance);
+}
+
+static float nmmtl_general_point_epsilon(DIELECTRICS_P dielectrics,
+                                         double x, double y)
+{
+  for(DIELECTRICS_P dielectric = dielectrics; dielectric != NULL;
+      dielectric = dielectric->next)
+    if(nmmtl_general_point_in_dielectric(dielectric, x, y))
+      return(dielectric->constant);
+  return(AIR_CONSTANT);
+}
+
+static int nmmtl_general_point_in_any_circle(
+  const std::vector<NMMTL_GENERAL_CIRCLE> &circles, double x, double y)
+{
+  for(std::vector<NMMTL_GENERAL_CIRCLE>::const_iterator it = circles.begin();
+      it != circles.end(); ++it) {
+    const double dx = x - it->centerx;
+    const double dy = y - it->centery;
+    if(dx * dx + dy * dy < it->radius * it->radius) return(TRUE);
+  }
+  return(FALSE);
+}
+
+static int nmmtl_general_arc_clip(CIRCLE_SEGMENTS_P *circle_segments,
+                                  DIELECTRIC_SEGMENTS_P *dielectric_segments,
+                                  DIELECTRICS_P dielectrics)
+{
+  std::vector<NMMTL_GENERAL_CIRCLE> circles;
+  for(CIRCLE_SEGMENTS_P source = *circle_segments; source != NULL;
+      source = source->next) {
+    NMMTL_GENERAL_CIRCLE circle;
+    circle.centerx = source->centerx;
+    circle.centery = source->centery;
+    circle.radius = source->radius;
+    circle.divisions = source->divisions;
+    circle.conductor = source->conductor;
+    circles.push_back(circle);
+  }
+
+  if(circles.empty()) return(SUCCESS);
+
+  CIRCLE_SEGMENTS_P rebuilt_circles = NULL;
+  CIRCLE_SEGMENTS_P circle_tail = NULL;
+  for(std::vector<NMMTL_GENERAL_CIRCLE>::const_iterator circle = circles.begin();
+      circle != circles.end(); ++circle) {
+    std::vector<double> angles;
+    angles.push_back(0.0);
+    angles.push_back(2.0 * PI);
+
+    for(DIELECTRIC_SEGMENTS_P dielectric = *dielectric_segments;
+        dielectric != NULL; dielectric = dielectric->next) {
+      /* Linear-conductor clipping already marked this entire remnant for
+         removal.  It is not a physical interface for circle intersection. */
+      if(dielectric->end_in_conductor != 0) continue;
+      double x0, y0, x1, y1;
+      nmmtl_die_seg_endpoints(dielectric, &x0, &y0, &x1, &y1);
+      std::vector<double> roots;
+      nmmtl_general_segment_circle_roots(x0, y0, x1, y1, *circle, &roots);
+      for(std::vector<double>::const_iterator root = roots.begin();
+          root != roots.end(); ++root) {
+        const double x = x0 + *root * (x1 - x0);
+        const double y = y0 + *root * (y1 - y0);
+        angles.push_back(nmmtl_general_angle(x, y, *circle));
+      }
+    }
+    nmmtl_general_sort_unique(&angles, NMMTL_GENERAL_ANGLE_TOL);
+
+    for(size_t i = 0; i + 1 < angles.size(); ++i) {
+      const double span = angles[i + 1] - angles[i];
+      if(!(span > NMMTL_GENERAL_ANGLE_TOL) ||
+         !(span <= 2.0 * PI + NMMTL_GENERAL_ANGLE_TOL)) continue;
+
+      CIRCLE_SEGMENTS_P arc =
+        (CIRCLE_SEGMENTS_P)malloc(sizeof(CIRCLE_SEGMENTS));
+      if(arc == NULL) {
+        nmmtl_general_free_circles(rebuilt_circles);
+        return(FAIL);
+      }
+      arc->next = NULL;
+      arc->centerx = circle->centerx;
+      arc->centery = circle->centery;
+      arc->radius = circle->radius;
+      arc->startangle = angles[i];
+      arc->endangle = angles[i + 1];
+      arc->radians = span;
+      arc->conductor = circle->conductor;
+      int divisions = (int)ceil(
+        (circle->divisions > 0 ? circle->divisions : 1) *
+        span / (2.0 * PI));
+      arc->divisions = divisions > 0 ? divisions : 1;
+
+      const double midpoint = 0.5 * (angles[i] + angles[i + 1]);
+      const double midpoint_x = circle->centerx +
+        circle->radius * cos(midpoint);
+      const double midpoint_y = circle->centery +
+        circle->radius * sin(midpoint);
+      const float epsilon = nmmtl_general_point_epsilon(
+        dielectrics, midpoint_x, midpoint_y);
+      arc->epsilon[0] = epsilon;
+      arc->epsilon[1] = epsilon;
+
+      if(circle_tail == NULL) rebuilt_circles = arc;
+      else circle_tail->next = arc;
+      circle_tail = arc;
+    }
+  }
+
+  DIELECTRIC_SEGMENTS_P rebuilt_dielectrics = NULL;
+  DIELECTRIC_SEGMENTS_P dielectric_tail = NULL;
+  for(DIELECTRIC_SEGMENTS_P source = *dielectric_segments; source != NULL;
+      source = source->next) {
+    /* Do not resurrect a segment already removed by a line conductor. */
+    if(source->end_in_conductor != 0) continue;
+
+    double x0, y0, x1, y1;
+    nmmtl_die_seg_endpoints(source, &x0, &y0, &x1, &y1);
+    const double dx = x1 - x0;
+    const double dy = y1 - y0;
+    const double original_length = hypot(dx, dy);
+    if(!(original_length > DBL_MIN)) continue;
+
+    std::vector<double> parameters;
+    parameters.push_back(0.0);
+    parameters.push_back(1.0);
+    for(std::vector<NMMTL_GENERAL_CIRCLE>::const_iterator circle = circles.begin();
+        circle != circles.end(); ++circle)
+      nmmtl_general_segment_circle_roots(x0, y0, x1, y1,
+                                         *circle, &parameters);
+    nmmtl_general_sort_unique(&parameters, NMMTL_GENERAL_PARAM_TOL);
+
+    for(size_t i = 0; i + 1 < parameters.size(); ++i) {
+      const double t0 = parameters[i];
+      const double t1 = parameters[i + 1];
+      if(!(t1 - t0 > NMMTL_GENERAL_PARAM_TOL)) continue;
+      const double midpoint_t = 0.5 * (t0 + t1);
+      const double midpoint_x = x0 + midpoint_t * dx;
+      const double midpoint_y = y0 + midpoint_t * dy;
+      if(nmmtl_general_point_in_any_circle(circles,
+                                           midpoint_x, midpoint_y)) continue;
+
+      const double piece_x0 = x0 + t0 * dx;
+      const double piece_y0 = y0 + t0 * dy;
+      const double piece_x1 = x0 + t1 * dx;
+      const double piece_y1 = y0 + t1 * dy;
+      const double piece_length = hypot(piece_x1 - piece_x0,
+                                        piece_y1 - piece_y0);
+      if(!(piece_length > DBL_MIN)) continue;
+
+      DIELECTRIC_SEGMENTS_P piece =
+        (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+      if(piece == NULL) {
+        nmmtl_general_free_circles(rebuilt_circles);
+        nmmtl_general_free_dielectrics(rebuilt_dielectrics);
+        return(FAIL);
+      }
+      *piece = *source;
+      piece->next = NULL;
+      piece->end_in_conductor = 0;
+      nmmtl_die_seg_set_explicit(piece,
+                                 piece_x0, piece_y0,
+                                 piece_x1, piece_y1);
+      if(piece->orientation == GENERAL_ORIENTATION) {
+        piece->at = piece->start = piece->end = 0.0;
+      } else if(piece->orientation == VERTICAL_ORIENTATION) {
+        piece->at = 0.5 * (piece_x0 + piece_x1);
+        piece->start = piece_y0;
+        piece->end = piece_y1;
+      } else {
+        piece->at = 0.5 * (piece_y0 + piece_y1);
+        piece->start = piece_x0;
+        piece->end = piece_x1;
+      }
+      piece->length = piece_length;
+      int divisions = (int)ceil(
+        (source->divisions > 0 ? source->divisions : 1) *
+        piece_length / original_length);
+      piece->divisions = divisions > 0 ? divisions : 1;
+
+      if(dielectric_tail == NULL) rebuilt_dielectrics = piece;
+      else dielectric_tail->next = piece;
+      dielectric_tail = piece;
+    }
+  }
+
+  nmmtl_general_free_circles(*circle_segments);
+  nmmtl_general_free_dielectrics(*dielectric_segments);
+  *circle_segments = rebuilt_circles;
+  *dielectric_segments = rebuilt_dielectrics;
+  return(SUCCESS);
+}
+
 /*
  *******************************************************************
  **  STRUCTURE DECLARATIONS AND TYPE DEFINTIONS
@@ -534,8 +925,16 @@
   */
 
 int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
-				    DIELECTRIC_SEGMENTS_P *dielectric_segments)
+				    DIELECTRIC_SEGMENTS_P *dielectric_segments,
+				    DIELECTRICS_P dielectrics)
 {
+  for(DIELECTRIC_SEGMENTS_P candidate = *dielectric_segments;
+      candidate != NULL; candidate = candidate->next)
+    if(candidate->orientation == GENERAL_ORIENTATION)
+      return(nmmtl_general_arc_clip(circle_segments,
+					    dielectric_segments,
+					    dielectrics));
+
   LINESEG dseg;
   POINT intersection1,intersection2;
   int number_of_intersections,tangent;
@@ -569,26 +968,13 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
   
   while(dieseg != NULL)
   {
-    if(dieseg->orientation == VERTICAL_ORIENTATION)
-    {
-      dseg.x[0] = dieseg->at;
-      dseg.x[1] = dieseg->at;
-      dseg.y[0] = dieseg->start;
-      dseg.y[1] = dieseg->end;
-      vert_die = TRUE;
-      if(dseg.y[1] > dseg.y[0]) die_inc_dir = TRUE;
-      else die_inc_dir = FALSE;
-    }
-    else
-    {
-      dseg.y[0] = dieseg->at;
-      dseg.y[1] = dieseg->at;
-      dseg.x[0] = dieseg->start;
-      dseg.x[1] = dieseg->end;
-      vert_die = FALSE;
-      if(dseg.x[1] > dseg.x[0]) die_inc_dir = TRUE;
-      else die_inc_dir = FALSE;
-    }
+    nmmtl_die_seg_endpoints(dieseg,
+                            &dseg.x[0], &dseg.y[0],
+                            &dseg.x[1], &dseg.y[1]);
+    vert_die = fabs(dseg.x[1] - dseg.x[0]) <
+      fabs(dseg.y[1] - dseg.y[0]);
+    if(vert_die) die_inc_dir = dseg.y[1] > dseg.y[0];
+    else die_inc_dir = dseg.x[1] > dseg.x[0];
     segment = *circle_segments;
     break_out_of_conductor_loop = FALSE;
     while(segment != NULL && break_out_of_conductor_loop == FALSE)
@@ -599,26 +985,13 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
       {
 	new_ds = NULL;
 	
-	if(dieseg->orientation == VERTICAL_ORIENTATION)
-	{
-	  dseg.x[0] = dieseg->at;
-	  dseg.x[1] = dieseg->at;
-	  dseg.y[0] = dieseg->start;
-	  dseg.y[1] = dieseg->end;
-	  vert_die = TRUE;
-	  if(dseg.y[1] > dseg.y[0]) die_inc_dir = TRUE;
-	  else die_inc_dir = FALSE;
-	}
-	else
-	{
-	  dseg.y[0] = dieseg->at;
-	  dseg.y[1] = dieseg->at;
-	  dseg.x[0] = dieseg->start;
-	  dseg.x[1] = dieseg->end;
-	  vert_die = FALSE;
-	  if(dseg.x[1] > dseg.x[0]) die_inc_dir = TRUE;
-	  else die_inc_dir = FALSE;
-	}
+	nmmtl_die_seg_endpoints(dieseg,
+				&dseg.x[0], &dseg.y[0],
+				&dseg.x[1], &dseg.y[1]);
+	vert_die = fabs(dseg.x[1] - dseg.x[0]) <
+	  fabs(dseg.y[1] - dseg.y[0]);
+	if(vert_die) die_inc_dir = dseg.y[1] > dseg.y[0];
+	else die_inc_dir = dseg.x[1] > dseg.x[0];
       }
       
       number_of_intersections = nmmtl_cirseg_seg_inter(segment,&dseg,
@@ -634,19 +1007,23 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	cond_hits = 0;
 	die_hits = 0;
 	
-	if(intersection1.x == dseg.x[0] &&
-	   intersection1.y == dseg.y[0])
+	{
+	  POINT endpoint;
+	  const double endpoint_scale = segment->radius + dieseg->length;
+	  endpoint.x = dseg.x[0]; endpoint.y = dseg.y[0];
+	  if(nmmtl_arc_points_equal(&intersection1, &endpoint, endpoint_scale))
 	{
 	  ip |= IP_I1D0;
 	  die_hits++;
 	}
-	if(intersection1.x == dseg.x[1] &&
-	   intersection1.y == dseg.y[1])
+	  endpoint.x = dseg.x[1]; endpoint.y = dseg.y[1];
+	  if(nmmtl_arc_points_equal(&intersection1, &endpoint, endpoint_scale))
 	{
 	  ip |= IP_I1D1;
 	  die_hits++;
 	}
-	cirseg_endpoint = nmmtl_cirseg_endpoint(segment,&intersection1);
+	}
+	 cirseg_endpoint = nmmtl_arc_cirseg_endpoint(segment,&intersection1);
 	if(cirseg_endpoint == INITIAL_ENDPOINT)
 	{
 	  ip |= IP_I1C0;
@@ -659,19 +1036,23 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	}
 	if(number_of_intersections == 2)
 	{
-	  if(intersection2.x == dseg.x[0] &&
-	     intersection2.y == dseg.y[0])
+	  {
+	    POINT endpoint;
+	    const double endpoint_scale = segment->radius + dieseg->length;
+	    endpoint.x = dseg.x[0]; endpoint.y = dseg.y[0];
+	    if(nmmtl_arc_points_equal(&intersection2, &endpoint, endpoint_scale))
 	  {
 	    ip |= IP_I2D0;
 	    die_hits++;
 	  }
-	  if(intersection2.x == dseg.x[1] &&
-	     intersection2.y == dseg.y[1])
+	    endpoint.x = dseg.x[1]; endpoint.y = dseg.y[1];
+	    if(nmmtl_arc_points_equal(&intersection2, &endpoint, endpoint_scale))
 	  {
 	    ip |= IP_I2D1;
 	    die_hits++;
 	  }
-	  cirseg_endpoint = nmmtl_cirseg_endpoint(segment,&intersection2);
+	  }
+	  cirseg_endpoint = nmmtl_arc_cirseg_endpoint(segment,&intersection2);
 	  if(cirseg_endpoint == INITIAL_ENDPOINT)
 	  {
 	    ip |= IP_I2C0;
@@ -817,6 +1198,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  /* Create new dielectric segment by splitting the old one. */
 	  new_ds = 
 	    (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+	  *new_ds = *dieseg;
 	  new_ds->next = dieseg->next;
 	  dieseg->next = new_ds;
 	  new_ds->at = dieseg->at;
@@ -827,18 +1209,10 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  new_ds->end_in_conductor = dieseg->end_in_conductor;
 	  new_ds->orientation = dieseg->orientation;
 	  
-	  if(dieseg->orientation == VERTICAL_ORIENTATION)
-	  {
-	    new_ds->start = intersection1.y;
-	    dieseg->end = intersection1.y;
-	  }
-	  else
-	  {
-	    new_ds->start = intersection1.x;
-	    dieseg->end = intersection1.x;
-	  }
+	  nmmtl_arc_die_set_start(new_ds, &intersection1);
+	  nmmtl_arc_die_set_end(dieseg, &intersection1);
 	  
-	  new_ds->length = new_ds->end - new_ds->start;
+	  new_ds->length = nmmtl_arc_die_length(new_ds);
 	  new_ds->divisions = (int)(dieseg->divisions * 
 	    (new_ds->length/dieseg->length) + 1.0);
 	  dieseg->length -= new_ds->length;
@@ -1015,6 +1389,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  /* Create new dielectric segment by splitting the old one. */
 	  new_ds = 
 	    (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+	  *new_ds = *dieseg;
 	  new_ds->next = dieseg->next;
 	  dieseg->next = new_ds;
 	  new_ds->at = dieseg->at;
@@ -1025,18 +1400,10 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  new_ds->end_in_conductor = dieseg->end_in_conductor;
 	  new_ds->orientation = dieseg->orientation;
 	  
-	  if(dieseg->orientation == VERTICAL_ORIENTATION)
-	  {
-	    new_ds->start = intersection1.y;
-	    dieseg->end = intersection1.y;
-	  }
-	  else
-	  {
-	    new_ds->start = intersection1.x;
-	    dieseg->end = intersection1.x;
-	  }
+	  nmmtl_arc_die_set_start(new_ds, &intersection1);
+	  nmmtl_arc_die_set_end(dieseg, &intersection1);
 	  
-	  new_ds->length = new_ds->end - new_ds->start;
+	  new_ds->length = nmmtl_arc_die_length(new_ds);
 	  new_ds->divisions = (int)(dieseg->divisions * 
 	    (new_ds->length/dieseg->length) + 1.0);
 	  dieseg->length -= new_ds->length;
@@ -1126,6 +1493,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  /* Create new dielectric segment by splitting the old one. */
 	  new_ds = 
 	    (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+	  *new_ds = *dieseg;
 	  new_ds->next = dieseg->next;
 	  dieseg->next = new_ds;
 	  new_ds->at = dieseg->at;
@@ -1177,16 +1545,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      new_cs_2->epsilon[0] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
 	      new_cs->epsilon[1] = dieseg->epsilonplus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection1.y;
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection1.x;
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection1);
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	      
 	    }
 	    else
@@ -1196,16 +1556,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      new_cs_2->epsilon[0] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
 	      new_cs->epsilon[1] = dieseg->epsilonminus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection2.y;
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection2.x;
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection2);
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	    }
 	  }
 	  else
@@ -1237,16 +1589,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      new_cs_2->epsilon[0] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
 	      new_cs->epsilon[1] = dieseg->epsilonplus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection2.y;
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection2.x;
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection2);
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	      
 	    }
 	    else
@@ -1256,28 +1600,20 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      new_cs_2->epsilon[0] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
 	      new_cs->epsilon[1] = dieseg->epsilonminus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection1.y;
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection1.x;
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection1);
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	    }
 	  }
 	  
 	  
 	  /* finally, compute the redistribution of divisions based on
 	     length */
-	  new_ds->length = new_ds->end - new_ds->start;
+	  new_ds->length = nmmtl_arc_die_length(new_ds);
 	  new_ds->divisions = (int)(dieseg->divisions * 
 	    (new_ds->length/dieseg->length) + 1.0);
 	  dieseg->divisions = (int)(dieseg->divisions *
-            (dieseg->end - dieseg->start)/dieseg->length + 1.00);
-	  dieseg->length = dieseg->end - dieseg->start;
+            nmmtl_arc_die_length(dieseg)/dieseg->length + 1.00);
+	  dieseg->length = nmmtl_arc_die_length(dieseg);
 	  
 	  break;
 	  
@@ -1329,14 +1665,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      /* from intersection1, initial end of die is outside conductor */
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	    }
 	    else /* ip & IP_I2D0 */
 	    {
@@ -1344,14 +1673,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 		 conductor */
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		dieseg->start = intersection1.y;
-	      }
-	      else
-	      {
-		dieseg->start = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(dieseg, &intersection1);
 	    }
 	  }
 	  else  /* ip & (IP_I1D0 | IP_I1D1) */
@@ -1368,14 +1690,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      /* from intersection2, initial end of die is outside conductor */
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	    }
 	    else /* ip & IP_I1D0 */
 	    {
@@ -1383,14 +1698,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 		 conductor */
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		dieseg->start = intersection2.y;
-	      }
-	      else
-	      {
-		dieseg->start = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(dieseg, &intersection2);
 	    }
           }
 	  
@@ -1404,8 +1712,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  segment->radians -= new_cs->radians;
 	  
 	  dieseg->divisions = (int)(dieseg->divisions * 
-	    ((dieseg->end - dieseg->start)/dieseg->length) + 1.0);
-	  dieseg->length = dieseg->end - dieseg->start;
+	    (nmmtl_arc_die_length(dieseg)/dieseg->length) + 1.0);
+	  dieseg->length = nmmtl_arc_die_length(dieseg);
 	  /* flag that we changed the dieseg and dseg needs to be 
 	     recomputed */
 	  new_ds = (DIELECTRIC_SEGMENTS_P)1;
@@ -1529,6 +1837,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  /* Create new dielectric segment by splitting the old one. */
 	  new_ds = 
 	    (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+	  *new_ds = *dieseg;
 	  new_ds->next = dieseg->next;
 	  dieseg->next = new_ds;
 	  new_ds->at = dieseg->at;
@@ -1555,16 +1864,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      /* terminal end of die is closest to intersection1 */
 	      segment->epsilon[0] = dieseg->epsilonplus;
 	      segment->epsilon[1] = dieseg->epsilonplus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection1.y;
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection1.x;
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection1);
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	      
 	    }
 	    else
@@ -1572,16 +1873,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      /* initial end of die is closest to intersection1 */
 	      segment->epsilon[0] = dieseg->epsilonminus;
 	      segment->epsilon[1] = dieseg->epsilonminus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection2.y;
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection2.x;
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection2);
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	    }
 	  }
 	  else /* ip & IP_I2C0 */
@@ -1596,16 +1889,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      /* from intersection2, initial end of die is inside conductor */
 	      segment->epsilon[0] = dieseg->epsilonplus;
 	      segment->epsilon[1] = dieseg->epsilonplus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection2.y;
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection2.x;
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection2);
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	      
 	    }
 	    else
@@ -1613,23 +1898,15 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	      /* from intersection1, initial end of die is outside conductor */
 	      segment->epsilon[0] = dieseg->epsilonminus;
 	      segment->epsilon[1] = dieseg->epsilonminus;
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection1.y;
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection1.x;
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection1);
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	    }
 	  }
 	  
 	  
 	  /* finally, compute the redistribution of divisions based on
 	     length */
-	  new_ds->length = new_ds->end - new_ds->start;
+	  new_ds->length = nmmtl_arc_die_length(new_ds);
 	  new_ds->divisions = (int)(dieseg->divisions * 
 	    (new_ds->length/dieseg->length) + 1.0);
 	  dieseg->length -= new_ds->length;
@@ -1654,10 +1931,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  if(ip & IP_I1D0)
 	  {
 	    /* terminal end of die is overhanging beyond intersection2 */
-	    if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      dieseg->start = intersection2.y;
-	    else
-	      dieseg->start = intersection2.x;
+	    nmmtl_arc_die_set_start(dieseg, &intersection2);
 	    
 	    /* which side is conductor ? */
 	    
@@ -1675,10 +1949,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  else if(ip & IP_I2D0)
 	  {
 	    /* terminal end of die is overhanging beyond intersection1 */
-	    if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      dieseg->start = intersection1.y;
-	    else
-	      dieseg->start = intersection1.x;
+	    nmmtl_arc_die_set_start(dieseg, &intersection1);
 	    
 	    /* which side is conductor ? */
 	    
@@ -1696,10 +1967,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  else if(ip & IP_I1D1)
 	  {
 	    /* initial end of die is overhanging beyond intersection2 */
-	    if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      dieseg->end = intersection2.y;
-	    else
-	      dieseg->end = intersection2.x;
+	    nmmtl_arc_die_set_end(dieseg, &intersection2);
 	    
 	    /* which side is conductor ? */
 	    
@@ -1717,10 +1985,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  else /* ip & IP_I2D1 */
 	  {
 	    /* initial end of die is overhanging beyond intersection1 */
-	    if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      dieseg->end = intersection1.y;
-	    else
-	      dieseg->end = intersection1.x;
+	    nmmtl_arc_die_set_end(dieseg, &intersection1);
 	    
 	    /* which side is conductor ? */
 	    
@@ -1740,8 +2005,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	     ratio of new length to old length */
 	  
 	  dieseg->divisions = (int)(dieseg->divisions * 
-	    ((dieseg->end - dieseg->start)/dieseg->length) + 1.0);
-	  dieseg->length = dieseg->end - dieseg->start;
+	    (nmmtl_arc_die_length(dieseg)/dieseg->length) + 1.0);
+	  dieseg->length = nmmtl_arc_die_length(dieseg);
 	  
 	  /* flag that we changed the dieseg and dseg needs to be 
 	     recomputed */
@@ -1801,6 +2066,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  /* Create new dielectric segment by splitting the old one. */
 	  new_ds = 
 	    (DIELECTRIC_SEGMENTS_P)malloc(sizeof(DIELECTRIC_SEGMENTS));
+	  *new_ds = *dieseg;
 	  new_ds->next = dieseg->next;
 	  dieseg->next = new_ds;
 	  new_ds->at = dieseg->at;
@@ -1838,16 +2104,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* from intersection2, initial end of die is inside conductor */
 	      
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection2.y;
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection2.x;
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection2);
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	      
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
@@ -1868,16 +2126,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* from intersection2, initial end of die is outside conductor */
 	      
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection1.y;
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection1.x;
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection1);
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	      
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
@@ -1911,16 +2161,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* from intersection1, initial end of die is inside conductor */
 	      
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection1.y;
-		dieseg->end = intersection2.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection1.x;
-		dieseg->end = intersection2.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection1);
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	      
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
@@ -1941,16 +2183,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* from intersection1, initial end of die is outside conductor */
 	      
-	      if(dieseg->orientation == VERTICAL_ORIENTATION)
-	      {
-		new_ds->start = intersection2.y;
-		dieseg->end = intersection1.y;
-	      }
-	      else
-	      {
-		new_ds->start = intersection2.x;
-		dieseg->end = intersection1.x;
-	      }
+	      nmmtl_arc_die_set_start(new_ds, &intersection2);
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	      
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
@@ -1971,7 +2205,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  
 	  /* finally, compute the redistribution of divisions based on
 	     length and angle */
-	  new_ds->length = new_ds->end - new_ds->start;
+	  new_ds->length = nmmtl_arc_die_length(new_ds);
 	  new_ds->divisions = (int)(dieseg->divisions * 
 	    (new_ds->length/dieseg->length) + 1.0);
 	  dieseg->divisions -= (new_ds->divisions - 1);
@@ -1999,8 +2233,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  {
 	    /* reduce die segment size by moving ending point to 
 	       intersection2 */
-	    if(vert_die) dieseg->end = intersection2.y;
-	    else dieseg->end = intersection2.x;
+	    nmmtl_arc_die_set_end(dieseg, &intersection2);
 	    if(ip & IP_I2C0)
 	      segment->epsilon[0] = dieseg->epsilonplus;
 	    else /* ip & IP_I2C1 */
@@ -2010,8 +2243,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  {
 	    /* reduce die segment size by moving starting point to 
 	       intersection2 */
-	    if(vert_die) dieseg->start = intersection2.y;
-	    else dieseg->start = intersection2.x;
+	    nmmtl_arc_die_set_start(dieseg, &intersection2);
 	    if(ip & IP_I2C0)
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	    else /* ip & IP_I2C1 */
@@ -2021,8 +2253,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  {
 	    /* reduce die segment size by moving ending point to 
 	       intersection1 */
-	    if(vert_die) dieseg->end = intersection1.y;
-	    else dieseg->end = intersection1.x;
+	    nmmtl_arc_die_set_end(dieseg, &intersection1);
 	    if(ip & IP_I1C1)
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	    else /* ip & IP_I1C0 */
@@ -2032,8 +2263,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  {
 	    /* reduce die segment size by moving starting point to 
 	       intersection1 */
-	    if(vert_die) dieseg->start = intersection1.y;
-	    else dieseg->start = intersection1.x;
+	    nmmtl_arc_die_set_start(dieseg, &intersection1);
 	    if(ip & IP_I1C1)
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	    else /* ip & IP_I1C0 */
@@ -2042,8 +2272,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  
 	  /* adjust divisions and set new length */
 	  dieseg->divisions = (int)(dieseg->divisions *
-	    (dieseg->end - dieseg->start)/dieseg->length + 1.0);
-	  dieseg->length = dieseg->end - dieseg->start;
+	    nmmtl_arc_die_length(dieseg)/dieseg->length + 1.0);
+	  dieseg->length = nmmtl_arc_die_length(dieseg);
 	  
 	  /* flag that we changed the dieseg and dseg needs to be 
 	     recomputed */
@@ -2111,8 +2341,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* reduce die segment size by moving starting point to 
 		 intersection2 */
-	      if(vert_die) dieseg->start = intersection2.y;
-	      else dieseg->start = intersection2.x;
+	      nmmtl_arc_die_set_start(dieseg, &intersection2);
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
 	    }
@@ -2120,8 +2349,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* reduce die segment size by moving ending point to 
 		 intersection2 */
-	      if(vert_die) dieseg->end = intersection2.y;
-	      else dieseg->end = intersection2.x;
+	      nmmtl_arc_die_set_end(dieseg, &intersection2);
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
 	    }
@@ -2137,8 +2365,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* reduce die segment size by moving starting point to 
 		 intersection1 */
-	      if(vert_die) dieseg->start = intersection1.y;
-	      else dieseg->start = intersection1.x;
+	      nmmtl_arc_die_set_start(dieseg, &intersection1);
 	      segment->epsilon[1] = dieseg->epsilonminus;
 	      new_cs->epsilon[0] = dieseg->epsilonplus;
 	    }
@@ -2146,8 +2373,7 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	    {
 	      /* reduce die segment size by moving ending point to 
 		 intersection1 */
-	      if(vert_die) dieseg->end = intersection1.y;
-	      else dieseg->end = intersection1.x;
+	      nmmtl_arc_die_set_end(dieseg, &intersection1);
 	      segment->epsilon[1] = dieseg->epsilonplus;
 	      new_cs->epsilon[0] = dieseg->epsilonminus;
 	    }
@@ -2155,8 +2381,8 @@ int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
 	  
 	  /* adjust divisions and set new length */
 	  dieseg->divisions = (int)(dieseg->divisions *
-	    (dieseg->end - dieseg->start)/dieseg->length + 1.0);
-	  dieseg->length = dieseg->end - dieseg->start;
+	    nmmtl_arc_die_length(dieseg)/dieseg->length + 1.0);
+	  dieseg->length = nmmtl_arc_die_length(dieseg);
 	  
 	  segment->endangle = intersection_angle;
 	  new_cs->startangle = intersection_angle;

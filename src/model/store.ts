@@ -2,7 +2,16 @@
  * Minimal observable app state + localStorage persistence.
  */
 import type { LossParams, SolveOutput, Stackup } from './types.ts';
-import { buildPreset, defaultParams, type PresetKind, type PresetParams, type PresetVariant } from './presets.ts';
+import {
+  buildPreset,
+  DEFAULT_COVER,
+  defaultParams,
+  etchReductionOf,
+  normalizeCover,
+  type PresetKind,
+  type PresetParams,
+  type PresetVariant,
+} from './presets.ts';
 
 export type InputMode = 'preset' | 'freeform';
 export type DisplayUnit = 'mils' | 'mm' | 'um' | 'inch';
@@ -19,13 +28,15 @@ export interface AppState {
   displayUnit: DisplayUnit;
   /** line length [m] + design frequency [Hz] for the loss/line stats panel */
   lineLengthM: number;
+  /** edge rise time [ps] used by the solver's crosstalk calculation */
+  riseTimePs: number;
   designFreqHz: number;
   lastSolve: SolveOutput | null;
   solving: boolean;
 }
 
-const LS_KEY = 'tnt-web-state-v1';
-const CFG_VERSION = 1;
+const LS_KEY = 'tnt-web-state-v3';
+const CFG_VERSION = 3;
 
 /** the shareable/persistable subset of the state */
 function persistable(s: AppState) {
@@ -33,24 +44,11 @@ function persistable(s: AppState) {
   return { v: CFG_VERSION, ...keep };
 }
 
-/** legacy (v1 share links): base64url JSON in #cfg= */
-export function decodeConfig(str: string): Partial<AppState> | null {
-  try {
-    const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const parsed = JSON.parse(new TextDecoder().decode(bytes));
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    return parsed as Partial<AppState>;
-  } catch {
-    return null;
-  }
-}
-
 /* ---------------- readable URL config ----------------
  *
  * Preset configs serialize as flat, human-scannable hash params, and only
  * values that differ from the preset defaults are included, e.g.
- *     #kind=stripline&var=diff&w=6.5&er=4.2
+ *     #v=3&kind=stripline&var=diff&w=6.5&er=4.2
  * All dimensions are in mils. The free-form stackup doesn't flatten, so
  * freeform mode carries it as URI-encoded JSON in `stack=`.
  */
@@ -60,39 +58,51 @@ const NUM_PARAMS: Array<[string, keyof PresetParams]> = [
   ['w', 'w'],
   ['s', 's'],
   ['t', 't'],
-  ['etch', 'etch'],
   ['h', 'h'],
   ['h2', 'h2'],
   ['er', 'er'],
   ['tand', 'tanD'],
+  ['er2', 'er2'],
+  ['tand2', 'tanD2'],
   ['sigma', 'sigma'],
   ['cpw_gap', 'cpwGap'],
   ['cpw_gnd_w', 'cpwGroundWidth'],
   ['cseg', 'cseg'],
   ['dseg', 'dseg'],
-  ['rise_ps', 'riseTimePs'],
 ];
 
 export function encodeConfig(s: AppState): string {
   const q = new URLSearchParams();
+  q.set('v', String(CFG_VERSION));
   if (s.mode === 'freeform') {
     q.set('mode', 'freeform');
-    q.set('stack', JSON.stringify(s.freeform));
+    // Length and rise time are app-level settings.  Keep them out of the
+    // embedded stack so a share link can never contain two conflicting
+    // values for the same physical input.
+    const { couplingLengthM: _length, riseTimePs: _rise, ...stack } = s.freeform;
+    q.set('stack', JSON.stringify(stack));
   } else {
     q.set('kind', s.presetKind);
     q.set('var', s.presetVariant);
     const defs = defaultParams(s.presetKind, s.presetVariant);
     const p = s.presetParams;
     for (const [key, field] of NUM_PARAMS) {
+      if ((field === 'er2' || field === 'tanD2') &&
+          (s.presetKind !== 'stripline' || !p.striplineSeparateMaterials)) continue;
       const v = p[field] as number;
       if (Number.isFinite(v) && v !== (defs[field] as number)) q.set(key, String(+v.toPrecision(6)));
     }
-    if (p.couplingLengthM !== defs.couplingLengthM) q.set('couple_mm', String(+(p.couplingLengthM * 1000).toPrecision(6)));
+    const etch = etchReductionOf(p.w, p.etch);
+    if (Number.isFinite(etch) && etch !== defs.etch)
+      q.set('etch_delta', String(+etch.toPrecision(6)));
     if (p.cpwBottomGround !== defs.cpwBottomGround) q.set('cpw_bottom_gnd', p.cpwBottomGround ? '1' : '0');
+    if (s.presetKind === 'stripline' && p.striplineSeparateMaterials) q.set('split_lam', '1');
     const dCover = defs.cover;
     if (!!p.cover !== !!dCover) q.set('mask', p.cover ? '1' : '0');
     if (p.cover) {
-      if (p.cover.thickness !== (dCover?.thickness ?? -1)) q.set('mask_t', String(+p.cover.thickness.toPrecision(6)));
+      if (p.cover.tCopper !== (dCover?.tCopper ?? -1)) q.set('mask_cu', String(+p.cover.tCopper.toPrecision(6)));
+      if (p.cover.tBase !== (dCover?.tBase ?? -1)) q.set('mask_base', String(+p.cover.tBase.toPrecision(6)));
+      if (p.cover.tBetween !== (dCover?.tBetween ?? -1)) q.set('mask_gap', String(+p.cover.tBetween.toPrecision(6)));
       if (p.cover.er !== (dCover?.er ?? -1)) q.set('mask_er', String(p.cover.er));
       if (p.cover.tanD !== (dCover?.tanD ?? -1)) q.set('mask_tand', String(p.cover.tanD));
     }
@@ -100,19 +110,19 @@ export function encodeConfig(s: AppState): string {
   const d = defaultState();
   if (s.displayUnit !== d.displayUnit) q.set('units', s.displayUnit);
   if (s.lineLengthM !== d.lineLengthM) q.set('len_mm', String(+(s.lineLengthM * 1000).toPrecision(6)));
+  if (s.riseTimePs !== d.riseTimePs) q.set('rise_ps', String(+s.riseTimePs.toPrecision(6)));
   if (s.designFreqHz !== d.designFreqHz) q.set('f_hz', String(s.designFreqHz));
   if (s.lossParams.roughnessModel !== d.lossParams.roughnessModel) q.set('rough', s.lossParams.roughnessModel);
   if (s.lossParams.roughnessRqUm !== d.lossParams.roughnessRqUm) q.set('rq_um', String(s.lossParams.roughnessRqUm));
   return q.toString();
 }
 
-/** parse the readable format (also detects legacy cfg=) */
+/** Parse the current readable URL format. */
 export function decodeHash(hash: string): Partial<AppState> | null {
   const raw = hash.replace(/^#/, '');
   if (!raw) return null;
-  const legacy = raw.match(/(?:^|&)cfg=([A-Za-z0-9_-]+)/);
-  if (legacy) return decodeConfig(legacy[1]);
   const q = new URLSearchParams(raw);
+  if (q.get('v') !== String(CFG_VERSION) || ['etch', 'mask_t', 'couple_mm'].some((key) => q.has(key))) return null;
   if (!q.has('kind') && !q.has('mode')) return null;
 
   const out: Partial<AppState> = {};
@@ -141,14 +151,24 @@ export function decodeHash(hash: string): Partial<AppState> | null {
         const v = num(key);
         if (v !== null) (p[field] as number) = v;
       }
-      const couple = num('couple_mm');
-      if (couple !== null) p.couplingLengthM = couple / 1000;
+      p.striplineSeparateMaterials = kind === 'stripline' && q.get('split_lam') === '1';
+      if (p.striplineSeparateMaterials) {
+        if (!q.has('er2')) p.er2 = p.er;
+        if (!q.has('tand2')) p.tanD2 = p.tanD;
+      }
+      const etchDelta = num('etch_delta');
+      if (etchDelta !== null) p.etch = Math.max(0, etchDelta);
+      p.etch = etchReductionOf(p.w, p.etch);
       if (q.has('cpw_bottom_gnd')) p.cpwBottomGround = q.get('cpw_bottom_gnd') !== '0';
       if (q.get('mask') === '0') p.cover = null;
-      else if (q.get('mask') === '1' && !p.cover) p.cover = { thickness: 1, er: 3.8, tanD: 0.02 };
+      else if (q.get('mask') === '1' && !p.cover) p.cover = { ...DEFAULT_COVER };
       if (p.cover) {
-        const mt = num('mask_t');
-        if (mt !== null) p.cover.thickness = mt;
+        const mcu = num('mask_cu');
+        if (mcu !== null) p.cover.tCopper = mcu;
+        const mbase = num('mask_base');
+        if (mbase !== null) p.cover.tBase = mbase;
+        const mgap = num('mask_gap');
+        if (mgap !== null) p.cover.tBetween = mgap;
         const mer = num('mask_er');
         if (mer !== null) p.cover.er = mer;
         const mtd = num('mask_tand');
@@ -162,6 +182,8 @@ export function decodeHash(hash: string): Partial<AppState> | null {
   if (units && ['mils', 'mm', 'um', 'inch'].includes(units)) out.displayUnit = units as DisplayUnit;
   const len = num('len_mm');
   if (len !== null) out.lineLengthM = len / 1000;
+  const rise = num('rise_ps');
+  if (rise !== null) out.riseTimePs = rise;
   const f = num('f_hz');
   if (f !== null) out.designFreqHz = f;
   const rough = q.get('rough');
@@ -179,24 +201,46 @@ export function decodeHash(hash: string): Partial<AppState> | null {
   return out;
 }
 
-/** merge a saved/shared partial state over defaults (tolerates old versions) */
+/** Merge a current saved/shared partial state over defaults. */
 function mergeOverDefaults(saved: Partial<AppState>): AppState {
   const d = defaultState();
+  const positive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  const lineLengthM = positive(saved.lineLengthM) ? saved.lineLengthM : d.lineLengthM;
+  const riseTimePs = positive(saved.riseTimePs) ? saved.riseTimePs : d.riseTimePs;
+  const presetParams = {
+    ...d.presetParams,
+    ...(saved.presetParams ?? {}),
+    couplingLengthM: lineLengthM,
+    riseTimePs,
+  };
+  presetParams.etch = etchReductionOf(presetParams.w, presetParams.etch);
+  presetParams.cover = presetParams.cover ? normalizeCover(presetParams.cover) : null;
+  const freeform = {
+    ...d.freeform,
+    ...(saved.freeform ?? {}),
+    couplingLengthM: lineLengthM,
+    riseTimePs,
+  };
   return {
     ...d,
     ...saved,
-    presetParams: { ...d.presetParams, ...(saved.presetParams ?? {}) },
+    presetParams,
     lossParams: { ...d.lossParams, ...(saved.lossParams ?? {}) },
-    freeform: (saved.freeform as AppState['freeform']) ?? d.freeform,
+    freeform,
+    lineLengthM,
+    riseTimePs,
     lastSolve: null,
     solving: false,
   };
 }
 
 export function currentStackup(s: AppState): Stackup {
-  return s.mode === 'preset'
+  const stackup = s.mode === 'preset'
     ? buildPreset(s.presetKind, s.presetVariant, s.presetParams)
     : s.freeform;
+  // The native file format still requires these fields on Stackup.  Always
+  // inject the canonical app settings at this boundary as a final safeguard.
+  return { ...stackup, couplingLengthM: s.lineLengthM, riseTimePs: s.riseTimePs };
 }
 
 function defaultFreeform(): Stackup {
@@ -220,7 +264,8 @@ export function defaultState(): AppState {
       nPoints: 160,
     },
     displayUnit: 'mils',
-    lineLengthM: 0.1, // 10 cm
+    lineLengthM: 0.0254, // 1 inch
+    riseTimePs: 100,
     designFreqHz: 1e9,
     lastSolve: null,
     solving: false,
@@ -229,12 +274,28 @@ export function defaultState(): AppState {
 
 type Listener = (s: AppState) => void;
 
+/** Decode only the current persisted-state schema. */
+export function decodeSavedState(raw: string): AppState | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const { v, ...saved } = parsed as Partial<AppState> & { v?: unknown };
+    if (v !== CFG_VERSION) return null;
+    return mergeOverDefaults(saved);
+  } catch {
+    return null;
+  }
+}
+
 class Store {
   private state: AppState;
   private listeners = new Set<Listener>();
 
   constructor() {
-    this.state = this.loadFromUrl() ?? this.load() ?? defaultState();
+    const hasHashConfig = window.location.hash.replace(/^#/, '').length > 0;
+    this.state = hasHashConfig
+      ? this.loadFromUrl() ?? defaultState()
+      : this.load() ?? defaultState();
   }
 
   /** a config in the URL hash wins over localStorage (shared links) */
@@ -252,7 +313,21 @@ class Store {
   }
 
   update(patch: Partial<AppState>) {
-    this.state = { ...this.state, ...patch };
+    if (patch.presetParams && patch.presetParams.cover === null && this.state.presetParams.cover !== null) {
+      console.trace('TNTWEB-DEBUG cover -> null');
+    }
+    const positive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+    const lineLengthM = positive(patch.lineLengthM) ? patch.lineLengthM : this.state.lineLengthM;
+    const riseTimePs = positive(patch.riseTimePs) ? patch.riseTimePs : this.state.riseTimePs;
+
+    const next = { ...this.state, ...patch, lineLengthM, riseTimePs };
+    const presetParams = { ...next.presetParams, couplingLengthM: lineLengthM, riseTimePs };
+    presetParams.etch = etchReductionOf(presetParams.w, presetParams.etch);
+    this.state = {
+      ...next,
+      presetParams,
+      freeform: { ...next.freeform, couplingLengthM: lineLengthM, riseTimePs },
+    };
     this.persist();
     for (const l of this.listeners) l(this.state);
   }
@@ -274,8 +349,7 @@ class Store {
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return null;
-      // merge over defaults so new fields appear after upgrades
-      return mergeOverDefaults(JSON.parse(raw));
+      return decodeSavedState(raw);
     } catch {
       return null;
     }

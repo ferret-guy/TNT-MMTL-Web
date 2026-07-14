@@ -41,6 +41,18 @@ function itemLines(item: StackupItem, idx: number): string {
         `\t -yOffset ${fmt(item.yOffset)} \\\n` +
         `\t -xOffset ${fmt(item.xOffset)}\n`
       );
+    case 'TrapezoidDielectric':
+      return (
+        `TrapezoidDielectric B${idx}  \\\n` +
+        `\t -topWidth ${fmt(item.topWidth)} \\\n` +
+        `\t -bottomWidth ${fmt(item.bottomWidth)} \\\n` +
+        `\t -height ${fmt(item.height)} \\\n` +
+        `\t -permittivity ${fmt(item.permittivity)} \\\n` +
+        `\t -number 1 \\\n` +
+        `\t -pitch 0 \\\n` +
+        `\t -yOffset ${fmt(item.yOffset)} \\\n` +
+        `\t -xOffset ${fmt(item.xOffset)}\n`
+      );
     case 'RectangleConductors': {
       const name = item.isGround ? `grFlank${idx}` : `Cond${idx}`;
       return (
@@ -120,6 +132,8 @@ export function validateStackup(s: Stackup): string[] {
       errs.push('Conductor width/height must be > 0.');
     if (it.kind === 'TrapezoidConductors' && (it.topWidth <= 0 || it.bottomWidth <= 0 || it.height <= 0))
       errs.push('Trapezoid widths/height must be > 0.');
+    if (it.kind === 'TrapezoidDielectric' && (it.topWidth <= 0 || it.bottomWidth <= 0 || it.height <= 0))
+      errs.push('Dielectric trapezoid widths/height must be > 0.');
     if (it.kind === 'CircleConductors' && it.diameter <= 0)
       errs.push('Circle diameter must be > 0.');
     if (isConductor(it) && it.number > 1 && it.pitch <= 0)

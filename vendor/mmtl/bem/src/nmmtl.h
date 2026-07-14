@@ -186,6 +186,7 @@ extern const float INFINITE_SLOPE;
 /* possible orientations of dielectric-dielectric interface */
 #define VERTICAL_ORIENTATION 0
 #define HORIZONTAL_ORIENTATION 1
+#define GENERAL_ORIENTATION 2
 
 /* Floating point exception handler constants */
 #define NMMTL_FPE_ELETOOSMALL 1
@@ -369,6 +370,10 @@ typedef struct dielectric
 {
   struct dielectric *next;
   double x0, y0, x1, y1;
+  /* For trapezoids x0/x1 remain the bounding extents.  These are the
+     actual endpoints of the horizontal top edge.  Rectangles use x0/x1. */
+  double top_x0, top_x1;
+  int primitive;
   float constant, tangent;
 } DIELECTRICS, *DIELECTRICS_P;
 
@@ -417,6 +422,9 @@ typedef struct dielectric_segments
 {
   struct dielectric_segments *next;
   double at, start, end;
+  /* Explicit endpoints make sloped dielectric interfaces possible.  For
+     legacy vertical/horizontal segments these mirror at/start/end. */
+  double x0, y0, x1, y1;
   double length;
   float epsilonplus, epsilonminus;
   int divisions;
@@ -424,6 +432,26 @@ typedef struct dielectric_segments
   unsigned char end_in_conductor;
   unsigned char orientation; /* one of VERTICAL_ORIENTATION, HORIZONTAL_ORI */
 } DIELECTRIC_SEGMENTS, *DIELECTRIC_SEGMENTS_P;
+
+static inline void nmmtl_die_seg_endpoints(const DIELECTRIC_SEGMENTS_P seg,
+                                           double *x0, double *y0,
+                                           double *x1, double *y1)
+{
+  if(seg->orientation == GENERAL_ORIENTATION) {
+    *x0 = seg->x0; *y0 = seg->y0; *x1 = seg->x1; *y1 = seg->y1;
+  } else if(seg->orientation == VERTICAL_ORIENTATION) {
+    *x0 = *x1 = seg->at; *y0 = seg->start; *y1 = seg->end;
+  } else {
+    *y0 = *y1 = seg->at; *x0 = seg->start; *x1 = seg->end;
+  }
+}
+
+static inline void nmmtl_die_seg_set_explicit(DIELECTRIC_SEGMENTS_P seg,
+                                              double x0, double y0,
+                                              double x1, double y1)
+{
+  seg->x0 = x0; seg->y0 = y0; seg->x1 = x1; seg->y1 = y1;
+}
 
 
 /*
@@ -839,7 +867,9 @@ int nmmtl_convert_units(float conversion,
                                     struct contour *groundwires);
 
 /* nmmtl_det_arc_intersections.cxx */
-int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments, DIELECTRIC_SEGMENTS_P *dielectric_segments);
+int nmmtl_determine_arc_intersectio(CIRCLE_SEGMENTS_P *circle_segments,
+                                    DIELECTRIC_SEGMENTS_P *dielectric_segments,
+                                    DIELECTRICS_P dielectrics);
 
 /* nmmtl_det_intersections.cxx */
 int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
@@ -963,7 +993,8 @@ int nmmtl_form_die_subseg(int plane_segments,
                                       struct dielectric_sub_segments **top_seg,
                                    struct dielectric_sub_segments **bottom_seg,
                                      struct dielectric_sub_segments **left_seg,
-                                    struct dielectric_sub_segments **right_seg,
+                                      struct dielectric_sub_segments **right_seg,
+                                     struct dielectric_segments **sloped_segments,
                                       SORTED_GND_DIE_LIST_P *lower_sorted_gdl,
                                       SORTED_GND_DIE_LIST_P *upper_sorted_gdl);
 
@@ -1031,6 +1062,7 @@ int
 			  struct dielectric_sub_segments **bottom_seg,
 			  struct dielectric_sub_segments **left_seg,
 			  struct dielectric_sub_segments **right_seg,
+			  struct dielectric_segments **sloped_segments,
 			  SORTED_GND_DIE_LIST_P *lower_sorted_gdl,
 			  SORTED_GND_DIE_LIST_P *upper_sorted_gdl);
 
@@ -1339,6 +1371,4 @@ void nmmtl_unload(float *potential_vector,
 int is_real(char *string);
 
 #endif
-
-
 

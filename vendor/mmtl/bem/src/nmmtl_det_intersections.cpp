@@ -202,6 +202,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
   DIELECTRIC_SEGMENTS_P dieseg, last_dieseg, new_ds;
   float theta1,turn_angle;
   float deltax,deltay;
+  double original_die_length;
   long int it;  /* intersection type - recordkeeping flag for IP_* */
   long int cl;  /* colinear type - recordkeeping flag for CL_* */
   int vert_cond, vert_die; /* flags indicating that these are vertical 
@@ -241,26 +242,12 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
     
     while(dieseg != NULL)
     {
-      if(dieseg->orientation == VERTICAL_ORIENTATION)
-      {
-	dseg.x[0] = dieseg->at;
-	dseg.x[1] = dieseg->at;
-	dseg.y[0] = dieseg->start;
-	dseg.y[1] = dieseg->end;
-	vert_die = TRUE;
-	if(dseg.y[1] > dseg.y[0]) die_inc_dir = TRUE;
-	else die_inc_dir = FALSE;
-      }
+      nmmtl_die_seg_endpoints(dieseg,&dseg.x[0],&dseg.y[0],&dseg.x[1],&dseg.y[1]);
+      vert_die = dseg.x[0] == dseg.x[1];
+      if(fabs(dseg.x[1]-dseg.x[0]) >= fabs(dseg.y[1]-dseg.y[0]))
+	die_inc_dir = dseg.x[1] > dseg.x[0];
       else
-      {
-	dseg.y[0] = dieseg->at;
-	dseg.y[1] = dieseg->at;
-	dseg.x[0] = dieseg->start;
-	dseg.x[1] = dieseg->end;
-	vert_die = FALSE; 
-	if(dseg.x[1] > dseg.x[0]) die_inc_dir = TRUE;
-	else die_inc_dir = FALSE;
-      }
+	die_inc_dir = dseg.y[1] > dseg.y[0];
       
       if(new_ls != NULL)
       {
@@ -539,7 +526,18 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	    dieseg->next = new_ds;
 	    new_ds->at = dieseg->at;
 	    new_ds->end = dieseg->end;
-	    if(dieseg->orientation == VERTICAL_ORIENTATION)
+	    if(dieseg->orientation == GENERAL_ORIENTATION)
+	    {
+	      new_ds->start = 0.0;
+	      new_ds->end = 0.0;
+	      new_ds->x0 = intersection1.x;
+	      new_ds->y0 = intersection1.y;
+	      new_ds->x1 = dseg.x[1];
+	      new_ds->y1 = dseg.y[1];
+	      dieseg->x1 = intersection1.x;
+	      dieseg->y1 = intersection1.y;
+	    }
+	    else if(dieseg->orientation == VERTICAL_ORIENTATION)
 	    {
 	      new_ds->start = intersection1.y;
 	      dieseg->end = intersection1.y;
@@ -555,7 +553,13 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	    new_ds->segment_number = dieseg->segment_number;
 	    new_ds->end_in_conductor = dieseg->end_in_conductor;
 	    new_ds->orientation = dieseg->orientation;
-	    new_ds->length = new_ds->end - new_ds->start;
+	    if(dieseg->orientation == GENERAL_ORIENTATION)
+	    {
+	      deltax = new_ds->x1-new_ds->x0;
+	      deltay = new_ds->y1-new_ds->y0;
+	      new_ds->length = sqrt(deltax*deltax+deltay*deltay);
+	    }
+	    else new_ds->length = fabs(new_ds->end - new_ds->start);
 	    new_ds->divisions = (int)(dieseg->divisions * 
 	      (new_ds->length/dieseg->length) + 1.0);
 	    dieseg->length -= new_ds->length;
@@ -932,6 +936,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	    break;
 	    
 	  case CL_D2:
+	    original_die_length = dieseg->length;
 	    
 	    /* conductor segment action: no fragmentation, set epsilon
 	       Find the proper value of epsilon by seeing if
@@ -991,6 +996,8 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	    new_ds->epsilonminus = dieseg->epsilonminus;
 	    new_ds->segment_number = dieseg->segment_number;
 	    new_ds->orientation = dieseg->orientation;
+	    new_ds->x0 = dieseg->x0; new_ds->y0 = dieseg->y0;
+	    new_ds->x1 = dieseg->x1; new_ds->y1 = dieseg->y1;
 	    /* clear initial end_in_conductor bit - bit 0 */
 	    new_ds->end_in_conductor = dieseg->end_in_conductor & 2;
 	    /* clear terminal end_in_conductor bit - bit 1 */
@@ -1008,7 +1015,19 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	      
 	      */
 	    
-	    if(die_inc_dir == inter_inc_dir)
+	    if(dieseg->orientation == GENERAL_ORIENTATION)
+	    {
+	      const double vx = dseg.x[1]-dseg.x[0];
+	      const double vy = dseg.y[1]-dseg.y[0];
+	      const double denom = vx*vx+vy*vy;
+	      const double t1 = ((intersection1.x-dseg.x[0])*vx + (intersection1.y-dseg.y[0])*vy)/denom;
+	      const double t2 = ((intersection2.x-dseg.x[0])*vx + (intersection2.y-dseg.y[0])*vy)/denom;
+	      const POINT first = t1 < t2 ? intersection1 : intersection2;
+	      const POINT second = t1 < t2 ? intersection2 : intersection1;
+	      dieseg->x1 = first.x; dieseg->y1 = first.y;
+	      new_ds->x0 = second.x; new_ds->y0 = second.y;
+	    }
+	    else if(die_inc_dir == inter_inc_dir)
 	    {
 	      if(vert_die)
 	      {
@@ -1035,12 +1054,24 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	      }
 	    }
 	    
-	    new_ds->length = new_ds->end - new_ds->start;
+	    if(dieseg->orientation == GENERAL_ORIENTATION)
+	    {
+	      deltax = new_ds->x1-new_ds->x0; deltay = new_ds->y1-new_ds->y0;
+	      new_ds->length = sqrt(deltax*deltax+deltay*deltay);
+	      deltax = dieseg->x1-dieseg->x0; deltay = dieseg->y1-dieseg->y0;
+	      dieseg->length = sqrt(deltax*deltax+deltay*deltay);
+	    }
+	    else new_ds->length = fabs(new_ds->end - new_ds->start);
 	    new_ds->divisions = (int)(dieseg->divisions *
-	      (new_ds->length/dieseg->length) + 1.0);
-	    dieseg->divisions = (int)(dieseg->divisions *
-	      ((dieseg->end - dieseg->start)/dieseg->length) + 1.0);
-	    dieseg->length = dieseg->end - dieseg->start;
+	      (new_ds->length/original_die_length) + 1.0);
+	    if(dieseg->orientation != GENERAL_ORIENTATION)
+	    {
+	      dieseg->divisions = (int)(dieseg->divisions *
+	        (fabs(dieseg->end - dieseg->start)/dieseg->length) + 1.0);
+	      dieseg->length = fabs(dieseg->end - dieseg->start);
+	    }
+	    else dieseg->divisions = (int)(dieseg->divisions *
+	      (dieseg->length/original_die_length) + 1.0);
 	    
 	    break;
 	    
@@ -2150,4 +2181,3 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
   }                                /* while looping through the segments */
   return(SUCCESS);
 }
-

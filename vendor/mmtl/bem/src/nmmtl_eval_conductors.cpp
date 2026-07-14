@@ -273,7 +273,8 @@ int nmmtl_evaluate_conductors(struct dielectric *dielectrics,
   if(status != SUCCESS) return(status);
   
   status = nmmtl_determine_arc_intersectio(conductor_cs,
-					   dielectric_segments);
+					   dielectric_segments,
+					   dielectrics);
   if(status != SUCCESS) return(status);
   
   status = nmmtl_orphans(conductor_cs,conductor_ls,dielectrics,

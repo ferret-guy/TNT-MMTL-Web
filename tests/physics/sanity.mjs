@@ -13,8 +13,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
 
-const { buildPreset, defaultParams } = await import(pathToFileURL(join(root, 'src/model/presets.ts')));
+const { buildPreset, defaultParams, topWidthOf } = await import(pathToFileURL(join(root, 'src/model/presets.ts')));
 const { generateXsctn } = await import(pathToFileURL(join(root, 'src/xsctn/generate.ts')));
+const { computeGeometry } = await import(pathToFileURL(join(root, 'src/ui/crossSection.ts')));
 const { runGoalSeek } = await import(pathToFileURL(join(root, 'src/analysis/goalSeek.ts')));
 const { parseResult } = await import(pathToFileURL(join(root, 'src/solver/parseResult.mjs')));
 const createBemModule = (await import(pathToFileURL(join(root, 'public/wasm/bem.mjs')))).default;
@@ -37,7 +38,7 @@ async function solve({ xsctn, cseg, dseg }) {
   } catch {
     /* fallthrough */
   }
-  return { ok: log.includes('MMTL is done') && !!result, result };
+  return { ok: log.includes('MMTL is done') && !!result, result, log };
 }
 
 async function solvePreset(kind, variant, mutate = (p) => p) {
@@ -45,7 +46,7 @@ async function solvePreset(kind, variant, mutate = (p) => p) {
   const stackup = buildPreset(kind, variant, params);
   const out = await solve({ xsctn: generateXsctn(stackup), cseg: stackup.cseg, dseg: stackup.dseg });
   if (!out.ok) throw new Error(`${kind}/${variant} solve failed`);
-  return { params, r: out.result };
+  return { params, r: out.result, log: out.log };
 }
 
 /* ---- closed forms ---- */
@@ -76,6 +77,68 @@ const check = (name, cond, detail) => {
   if (!cond) failures++;
 };
 const near = (a, b, relPct) => Math.abs(a - b) <= (Math.abs(b) * relPct) / 100;
+
+/* 0. The solder-mask solve uses a true parallel-offset trapezoid. This is a
+   geometry check before the physics checks so rectangular shoulders cannot
+   silently return. The guided UI ties C1 and C3. */
+{
+  const p = {
+    ...defaultParams('microstrip', 'diff'),
+    w: 8,
+    s: 8,
+    h: 6,
+    t: 1.6,
+    etch: 0.5,
+    cover: { tCopper: 0.6, tBase: 0.8, tBetween: 0.8, er: 3.8, tanD: 0.02 },
+  };
+  const stackup = buildPreset('microstrip', 'diff', p);
+  const geometry = computeGeometry(stackup);
+  const base = stackup.items.find((item) => item.id === 'coverBaseLayer');
+  const shoulderItems = stackup.items
+    .filter((item) => item.kind === 'TrapezoidDielectric' && item.id.startsWith('coverShoulder'))
+    .sort((a, b) => a.xOffset - b.xOffset);
+  const shoulderPolys = geometry.polys
+    .filter((poly) => poly.kind === 'block' && poly.item?.id.startsWith('coverShoulder'))
+    .sort((a, b) => a.x0 - b.x0);
+  check(
+    'soldermask exact C1/C3 base',
+    base?.kind === 'DielectricLayer' && near(base.thickness, 0.8, 1e-8),
+    `base=${base?.kind === 'DielectricLayer' ? base.thickness : 'missing'} mil`,
+  );
+  check(
+    'soldermask exact C2 top rise',
+    shoulderPolys.length === 2 && shoulderPolys.every((poly) => near(poly.y1 - p.h, p.t + 0.6, 1e-8)),
+    `tops=${shoulderPolys.map((poly) => (poly.y1 - p.h).toFixed(3)).join(',')} mil`,
+  );
+  const conductorSideSlope = (p.w - topWidthOf(p.w, p.etch)) / (2 * p.t);
+  const shoulderSideSlope = shoulderItems[0]
+    ? (shoulderItems[0].bottomWidth - shoulderItems[0].topWidth) / (2 * shoulderItems[0].height)
+    : NaN;
+  check(
+    'soldermask shoulder follows etched side',
+    shoulderItems.length === 2 && near(shoulderSideSlope, conductorSideSlope, 1e-8),
+    `mask slope=${shoulderSideSlope.toFixed(6)}, copper slope=${conductorSideSlope.toFixed(6)}`,
+  );
+  const first = shoulderItems[0];
+  const topWidth = topWidthOf(p.w, p.etch);
+  // Compare the shoulder top to the copper side line extrapolated through
+  // the C2 miter rise (not to the copper's top corner at a lower y).
+  const horizontalSeparation = first
+    ? first.topWidth / 2 - (topWidth / 2 - conductorSideSlope * p.cover.tCopper)
+    : NaN;
+  const normalSeparation = horizontalSeparation / Math.hypot(1, conductorSideSlope);
+  check(
+    'soldermask side normal thickness is C2',
+    near(normalSeparation, 0.6, 1e-8),
+    `normal=${normalSeparation.toFixed(6)} mil`,
+  );
+  const xsctn = generateXsctn(stackup);
+  check(
+    'soldermask emitted as trapezoid solver regions',
+    (xsctn.match(/TrapezoidDielectric/g) ?? []).length === 2,
+    'two BEM dielectric trapezoids over the tied base layer',
+  );
+}
 
 /* 1. ~50 ohm microstrip: h=10 mil, er=4.3, w=19 mil, thin trace */
 {
@@ -128,6 +191,46 @@ const near = (a, b, relPct) => Math.abs(a - b) <= (Math.abs(b) * relPct) / 100;
 {
   const trap = await solvePreset('microstrip', 'se', (p) => ({ ...p, etch: 0, cseg: 20, dseg: 20 }));
   check('uncovered trapezoid physical', trap.r.epsEff[0] > 2.0, `eeff=${trap.r.epsEff[0].toFixed(3)} (must be >> 1, substrate visible)`);
+}
+
+/* 5b. Exact mask regions are accepted by the production WASM and increase
+   capacitance, so the coated line has lower impedance than the bare line. */
+{
+  const mutate = (cover) => (p) => ({
+    ...p,
+    w: 12,
+    h: 6,
+    t: 1.6,
+    etch: 0.2,
+    cover,
+    cseg: 24,
+    dseg: 24,
+  });
+  const mask = { tCopper: 0.6, tBase: 1.2, tBetween: 1.2, er: 3.8, tanD: 0.02 };
+  const coated = await solvePreset('microstrip', 'se', mutate(mask));
+  const coatedFine = await solvePreset('microstrip', 'se', (p) => ({
+    ...mutate(mask)(p),
+    cseg: 36,
+    dseg: 36,
+  }));
+  const bare = await solvePreset('microstrip', 'se', mutate(null));
+  check(
+    'exact soldermask lowers Z0',
+    coated.r.z0[0] < bare.r.z0[0],
+    `coated=${coated.r.z0[0].toFixed(3)} bare=${bare.r.z0[0].toFixed(3)}`,
+  );
+  check(
+    'exact soldermask has no orphan boundaries',
+    !coated.log.includes('ORPHAN'),
+    coated.log.includes('ORPHAN')
+      ? coated.log.split('\n').filter((line) => line.includes('ORPHAN')).join(' | ')
+      : 'all conductor edges assigned',
+  );
+  check(
+    'exact soldermask mesh convergence',
+    near(coated.r.z0[0], coatedFine.r.z0[0], 1),
+    `DSEG 24=${coated.r.z0[0].toFixed(3)} DSEG 36=${coatedFine.r.z0[0].toFixed(3)} (1%)`,
+  );
 }
 
 /* 6. goal seek converges to 50 ohms on microstrip */

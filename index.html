@@ -3,18 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TNT-Web — PCB Trace Impedance Simulator</title>
+    <title>TNT-MMTL Web — PCB Trace Impedance Simulator</title>
     <meta name="description" content="Design single-ended and differential PCB traces and simulate them in your browser with the MMTL/TNT boundary-element field solver (WebAssembly)." />
   </head>
   <body>
     <nav class="navbar navbar-expand bg-body-tertiary border-bottom mb-3">
       <div class="container-fluid">
-        <span class="navbar-brand fw-bold">TNT-Web</span>
+        <span class="navbar-brand fw-bold">TNT-MMTL Web</span>
         <span class="navbar-text small d-none d-md-inline">
           PCB trace impedance — MMTL boundary-element field solver in WebAssembly
         </span>
         <button class="btn btn-sm btn-outline-primary ms-auto" id="btn-share"
-                title="copy a link that opens this exact configuration">Share</button>
+                title="copy a link that opens this exact configuration">Share this configuration</button>
         <span class="ms-3 small text-body-secondary" id="solver-status">solver: loading…</span>
       </div>
     </nav>
@@ -56,6 +56,7 @@
                 <label class="btn btn-outline-secondary" for="cs-view-lines">Field lines</label>
               </div>
               <select class="form-select form-select-sm w-auto d-none" id="cs-driven" title="driven line"></select>
+              <span class="small text-body-secondary d-none" id="cs-driven-label"></span>
               <span class="ms-auto small text-body-secondary" id="cs-note"></span>
             </div>
             <div class="card-body p-2">
@@ -76,26 +77,34 @@
             </div>
           </div>
 
-          <ul class="nav nav-tabs" role="tablist">
-            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-results" type="button" role="tab">Results</button></li>
-            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-loss" type="button" role="tab">Loss &amp; line stats</button></li>
-            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-log" type="button" role="tab">Log</button></li>
-          </ul>
-          <div class="tab-content border border-top-0 rounded-bottom p-3 bg-body">
-            <div class="tab-pane fade show active" id="tab-results" role="tabpanel"></div>
+          <div class="border rounded p-3 bg-body">
+            <section aria-labelledby="results-heading">
+              <h2 class="h6 mb-2" id="results-heading">Results</h2>
+              <div id="results-summary"></div>
+            </section>
 
-            <div class="tab-pane fade" id="tab-loss" role="tabpanel">
+            <hr class="my-3">
+
+            <section aria-labelledby="loss-heading">
+              <h2 class="h6 mb-2" id="loss-heading">Insertion loss &amp; line stats</h2>
               <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
                 <div>
-                  <label class="form-label mb-0 small">Line Length</label>
+                  <label class="form-label mb-0 small">Length (loss &amp; crosstalk)</label>
                   <div class="input-group input-group-sm">
-                    <input type="number" step="any" min="0" class="form-control" id="loss-length" value="100" style="max-width:6rem">
+                    <input type="number" step="any" min="0" class="form-control" id="loss-length" value="25.4" style="max-width:6rem">
                     <select class="form-select" id="loss-length-unit" style="max-width:5.2rem">
-                      <option value="0.001">mm</option>
-                      <option value="0.01" selected>cm</option>
+                      <option value="0.001" selected>mm</option>
+                      <option value="0.01">cm</option>
                       <option value="1">m</option>
                       <option value="0.0254">in</option>
                     </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="form-label mb-0 small" for="loss-rise">Rise Time (crosstalk)</label>
+                  <div class="input-group input-group-sm">
+                    <input type="number" step="1" min="0" class="form-control" id="loss-rise" value="100" style="max-width:6rem">
+                    <span class="input-group-text">ps</span>
                   </div>
                 </div>
                 <div>
@@ -123,33 +132,30 @@
                     <span class="input-group-text">µm RMS</span>
                   </div>
                 </div>
-                <div class="ms-auto text-end">
-                  <button class="btn btn-sm btn-outline-primary" id="btn-calcrl"
-                          title="replace the analytic √f skin term with calcRL — TNT's full-wave wavelet solver — computing true skin + proximity R(f) at several frequencies">
-                    <span class="spinner-border spinner-border-sm d-none" id="calcrl-spinner"></span>
-                    Refine R(f) with calcRL
-                  </button>
-                  <div class="tiny text-body-secondary" id="calcrl-note"></div>
-                </div>
                 <span class="small text-body-secondary" id="loss-note"></span>
               </div>
               <div class="row row-cols-2 row-cols-xl-4 g-2 mb-2" id="line-stats"></div>
               <div id="loss-plot" style="min-height:340px"></div>
-              <p class="small text-body-secondary mb-0 mt-1">
-                Analytic post-processing (W-element style): R(f) = √(R<sub>dc</sub>² + (K·R<sub>s</sub>√f)²) with the
-                selected roughness correction K(f); G(f) = 2πf·C·tanδ. The field solve itself is quasi-static —
-                see the note under Results.
-              </p>
-            </div>
+            </section>
 
-            <div class="tab-pane fade" id="tab-log" role="tabpanel">
-              <h6 class="mb-1">Goal seek iterations</h6>
-              <pre class="small bg-body-tertiary p-2 rounded" id="log-goalseek" style="max-height:14rem;overflow:auto">—</pre>
-              <h6 class="mb-1">Solver stdout</h6>
-              <pre class="small bg-body-tertiary p-2 rounded" id="log-stdout" style="max-height:14rem;overflow:auto">—</pre>
-              <h6 class="mb-1">.result file</h6>
-              <pre class="small bg-body-tertiary p-2 rounded" id="log-result" style="max-height:22rem;overflow:auto">—</pre>
-            </div>
+            <hr class="my-3">
+
+            <section aria-labelledby="matrices-heading">
+              <h2 class="h6 mb-2" id="matrices-heading">Solver matrices</h2>
+              <div id="result-matrices"></div>
+            </section>
+
+            <details class="mt-3 border rounded p-2" id="log-panel">
+              <summary class="fw-semibold">Log</summary>
+              <div class="pt-3" id="tab-log">
+                <h6 class="mb-1">Goal seek iterations</h6>
+                <pre class="small bg-body-tertiary p-2 rounded" id="log-goalseek" style="max-height:14rem;overflow:auto">—</pre>
+                <h6 class="mb-1">Solver stdout</h6>
+                <pre class="small bg-body-tertiary p-2 rounded" id="log-stdout" style="max-height:14rem;overflow:auto">—</pre>
+                <h6 class="mb-1">.result file</h6>
+                <pre class="small bg-body-tertiary p-2 rounded" id="log-result" style="max-height:22rem;overflow:auto">—</pre>
+              </div>
+            </details>
           </div>
 
           <p class="small text-body-secondary mt-3">

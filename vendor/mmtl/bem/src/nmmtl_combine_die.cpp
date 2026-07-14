@@ -138,12 +138,14 @@ int nmmtl_combine_die(struct dielectric *dielectrics,
   struct dielectric_sub_segments *bottom_seg;
   struct dielectric_sub_segments *left_seg;
   struct dielectric_sub_segments *right_seg;
+  struct dielectric_segments *sloped_segments;
   
   
   top_seg = NULL;
   bottom_seg = NULL;
   left_seg = NULL;
   right_seg = NULL;
+  sloped_segments = NULL;
   
   if(gnd_planes < 2)
   {
@@ -158,6 +160,7 @@ int nmmtl_combine_die(struct dielectric *dielectrics,
 				   left_of_gnd_planes,right_of_gnd_planes,
 				   &top_seg,&bottom_seg,
 				   &left_seg,&right_seg,
+				   &sloped_segments,
 				   lower_sorted_gdl,
 				   upper_sorted_gdl);
   }
@@ -172,10 +175,22 @@ int nmmtl_combine_die(struct dielectric *dielectrics,
 				   left_of_gnd_planes,right_of_gnd_planes,
 				   &top_seg,&bottom_seg,
 				   &left_seg,&right_seg,
+				   &sloped_segments,
 				   lower_sorted_gdl,
 				   upper_sorted_gdl);
   }
   if(status != SUCCESS) return(status);
+
+  /* Sloped sides cannot participate in the legacy axis-aligned pairing
+     pass. They are already complete dielectric/air interfaces. */
+  while(sloped_segments != NULL)
+  {
+    struct dielectric_segments *next = sloped_segments->next;
+    sloped_segments->segment_number = segment_number++;
+    sloped_segments->next = *dielectric_segments;
+    *dielectric_segments = sloped_segments;
+    sloped_segments = next;
+  }
   
   
   /* normal is UP, so pass in top first, since it will point from top */

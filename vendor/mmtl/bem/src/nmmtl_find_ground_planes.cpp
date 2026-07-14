@@ -104,6 +104,10 @@ int nmmtl_find_ground_planes(struct dielectric *dielectrics,
   *bottom_of_top_plane = dielectrics->y1;
   *left = dielectrics->x0;
   *right = dielectrics->x1;
+  if(dielectrics->primitive == POLYGON) {
+    if(dielectrics->top_x0 < *left) *left = dielectrics->top_x0;
+    if(dielectrics->top_x1 > *right) *right = dielectrics->top_x1;
+  }
   dielectrics = dielectrics->next;
   while(dielectrics != NULL)
   {
@@ -115,6 +119,10 @@ int nmmtl_find_ground_planes(struct dielectric *dielectrics,
       *left = dielectrics->x0;
     if(dielectrics->x1 > *right)
       *right = dielectrics->x1;
+    if(dielectrics->primitive == POLYGON) {
+      if(dielectrics->top_x0 < *left) *left = dielectrics->top_x0;
+      if(dielectrics->top_x1 > *right) *right = dielectrics->top_x1;
+    }
     dielectrics = dielectrics->next;
   }
   

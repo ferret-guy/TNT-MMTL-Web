@@ -15,6 +15,7 @@ import { renderStackupEditor } from './ui/stackupEditor.ts';
 import { renderResults } from './ui/resultsPanel.ts';
 import {
   computeGeometry,
+  computeViewport,
   renderCrossSection,
   VIEWPORT_PAD,
   type Viewport,
@@ -29,10 +30,19 @@ import {
 } from './ui/fieldView.ts';
 import { renderLossPlot } from './ui/lossPlot.ts';
 import { computeLineStats } from './analysis/lineStats.ts';
-import { lossCurve, lossInputsFrom, UNIT_SCALE, type RefinedR } from './analysis/losses.ts';
-import { buildCalcRLGeometry, parseCalcRLOut } from './analysis/calcrlInput.ts';
+import {
+  lossCurve,
+  lossInputsFrom,
+  striplineEffectiveLossTangent,
+  UNIT_SCALE,
+} from './analysis/losses.ts';
 import type { FieldGrid } from './field/potential.ts';
-import { isConductor, isSignal, type ConductorItem, type Stackup } from './model/types.ts';
+import {
+  isConductor,
+  isSignal,
+  type ConductorItem,
+  type Stackup,
+} from './model/types.ts';
 import type { DimUnit } from './ui/dimField.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
@@ -42,6 +52,9 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => {
 };
 
 const client = new SolverClient();
+// Field reconstruction is deliberately isolated from the BEM worker.  Its
+// CPU-heavy grid integration can then be terminated without delaying a solve.
+const fieldClient = new SolverClient();
 const MILS_PER_METER = 1 / UNIT_SCALE.mils;
 
 /* ---------------- solver status probe ---------------- */
@@ -51,7 +64,7 @@ const MILS_PER_METER = 1 / UNIT_SCALE.mils;
     const res = await fetch(new URL(`${import.meta.env.BASE_URL}wasm/bem.wasm`, document.baseURI), {
       method: 'HEAD',
     });
-    status.textContent = res.ok ? 'solver: ready (wasm loaded on demand)' : 'solver: bem.wasm missing!';
+    status.textContent = res.ok ? 'solver: ready' : 'solver: bem.wasm missing!';
   } catch {
     status.textContent = 'solver: bem.wasm missing!';
   }
@@ -64,6 +77,7 @@ function goalSeekHook() {
   return async (mode: 'z0' | 'zdiff' | 'zodd' | 'zeven', seekParam: 'w' | 's', target: number) => {
     const s = store.get();
     gsLog.textContent = `goal seek: ${mode} -> ${target} Ω, tuning ${seekParam === 'w' ? 'width' : 'gap'}\n`;
+    cancelFieldWork();
     const res = await client.goalSeek(
       {
         kind: s.presetKind,
@@ -85,15 +99,21 @@ function goalSeekHook() {
       const patch = seekParam === 'w' ? { w: res.x } : { s: res.x };
       store.update({ presetParams: { ...store.get().presetParams, ...patch } });
       // update the field in place (a full re-render would orphan the
-      // goal-seek result message the form is about to display)
-      const field = document.querySelector<HTMLInputElement>(seekParam === 'w' ? '#pf-w' : '#pf-s');
-      if (field) {
-        field.dataset.mils = String(res.x);
-        const { formatDim } = await import('./ui/dimField.ts');
-        field.value = formatDim(res.x, field.dataset.unit as DimUnit);
+      // goal-seek result message the form is about to display).  Read back
+      // canonical state because narrowing the width can also limit etch.
+      const canonical = store.get().presetParams;
+      const updates: Array<[string, number]> = seekParam === 'w'
+        ? [['#pf-w', canonical.w], ['#pf-etch', canonical.etch]]
+        : [['#pf-s', canonical.s]];
+      const { formatDim } = await import('./ui/dimField.ts');
+      for (const [selector, mils] of updates) {
+        const field = document.querySelector<HTMLInputElement>(selector);
+        if (!field) continue;
+        field.dataset.mils = String(mils);
+        field.value = formatDim(mils, field.dataset.unit as DimUnit);
       }
       void doSolve();
-    }
+    } else scheduleIdleFieldWarm();
     return res;
   };
 }
@@ -110,6 +130,7 @@ function renderInputs(force = false) {
     s.presetKind,
     s.presetVariant,
     s.presetParams.cover !== null,
+    s.presetParams.striplineSeparateMaterials,
     s.freeform.items.map((i) => i.kind + (isConductor(i) ? i.isGround : '')),
   ]);
   if (!force && sig === lastInputSignature) return;
@@ -132,12 +153,37 @@ let viewMode: ViewMode = 'geom';
 const csSvg = $('#cross-section') as unknown as SVGSVGElement;
 const csCanvas = $('#cs-field-canvas') as HTMLCanvasElement;
 const csDriven = $('#cs-driven') as HTMLSelectElement;
+const csDrivenLabel = $('#cs-driven-label');
 const csLegend = $('#cs-field-legend');
 const fieldResidual = $('#field-residual');
 
 let fieldGridCache: (FieldGrid & { lines: string[] }) | null = null;
 let fieldGridStale = true;
 let solvedStackup: Stackup | null = null;
+let fieldSolveKey = '';
+let fieldGeneration = 0;
+let activeFieldRequestKey: string | null = null;
+let fieldIdleHandle: number | undefined;
+
+function cancelIdleFieldWarm() {
+  if (fieldIdleHandle === undefined) return;
+  window.cancelIdleCallback(fieldIdleHandle);
+  fieldIdleHandle = undefined;
+}
+
+function cancelFieldWork() {
+  cancelIdleFieldWarm();
+  fieldGeneration++;
+  activeFieldRequestKey = null;
+  if (fieldClient.busy) fieldClient.cancel();
+}
+
+/** Drop field work as soon as its geometry stops matching the form. */
+function invalidateFieldGrid() {
+  cancelFieldWork();
+  fieldGridCache = null;
+  fieldGridStale = true;
+}
 
 function focusField(fieldId: string) {
   const el = document.querySelector<HTMLInputElement>(`#${fieldId}`);
@@ -160,24 +206,40 @@ function renderCS() {
   const stackup = viewMode === 'geom' ? currentStackup(s) : (solvedStackup ?? currentStackup(s));
   let vp: Viewport;
   try {
+    const cover = s.mode === 'preset' ? s.presetParams.cover : null;
     vp = renderCrossSection(csSvg, stackup, {
       showDims: viewMode === 'geom' && s.mode === 'preset',
       outline: viewMode !== 'geom',
       onDimClick: focusField,
       onDimHover: hoverField,
       displayUnit: s.displayUnit as DimUnit,
+      coverProfile:
+        viewMode === 'geom' && cover
+          ? { tCopper: cover.tCopper, tBase: cover.tBase, tBetween: cover.tBetween }
+          : undefined,
+      presetKind: s.mode === 'preset' ? s.presetKind : undefined,
     });
   } catch (e) {
     $('#cs-note').textContent = (e as Error).message;
     return;
   }
-  $('#cs-note').textContent = `CSEG ${stackup.cseg} / DSEG ${stackup.dseg}`;
+  $('#cs-note').textContent = '';
 
   const showField = viewMode !== 'geom' && fieldGridCache && !fieldGridStale;
+  const lineCount = fieldGridCache?.lines.length ?? 0;
+  const selectedLine = Math.max(0, parseInt(csDriven.value || '0', 10));
+  const showDrivenSelect = viewMode !== 'geom' && lineCount > 1;
+  const showDrivenLabel = viewMode !== 'geom' && lineCount === 1;
   csCanvas.classList.toggle('d-none', !(viewMode === 'field' && showField));
   csLegend.classList.toggle('d-none', viewMode === 'geom');
   csLegend.classList.toggle('d-flex', viewMode !== 'geom');
-  csDriven.classList.toggle('d-none', viewMode === 'geom');
+  csDriven.classList.toggle('d-none', !showDrivenSelect);
+  csDrivenLabel.classList.toggle('d-none', !showDrivenLabel);
+  if (showDrivenLabel && fieldGridCache) {
+    const rawName = fieldGridCache.lines[selectedLine] ?? fieldGridCache.lines[0];
+    const displayName = store.get().mode === 'freeform' ? rawName : `Line ${selectedLine + 1}`;
+    csDrivenLabel.textContent = `drive: ${displayName}`;
+  }
 
   if (showField && fieldGridCache) {
     // canvas aligns with the svg's padded plot area
@@ -202,19 +264,37 @@ function renderCS() {
   }
 }
 
-async function computeFieldGrid() {
+async function computeFieldGrid(background = false) {
   const s = store.get();
   if (!s.lastSolve?.fieldText || !solvedStackup) {
-    fieldResidual.textContent = 'solve first';
+    if (!background) fieldResidual.textContent = 'solve first';
     return;
   }
-  fieldResidual.textContent = 'computing field…';
+  if (s.solving || client.busy || currentSolveKey() !== fieldSolveKey) {
+    if (!background) fieldResidual.textContent = 'waiting for solve…';
+    return;
+  }
+
+  const fieldText = s.lastSolve.fieldText;
+  const stackup = solvedStackup;
+  const solveKey = fieldSolveKey;
+  const lineIndex = parseInt(csDriven.value || '0', 10);
+  const requestKey = `${solveKey}|${lineIndex}`;
+  // A view opened while idle warming is in flight reuses that exact job.
+  if (fieldClient.busy && activeFieldRequestKey === requestKey) {
+    if (!background) fieldResidual.textContent = 'computing field…';
+    return;
+  }
+  if (fieldClient.busy) fieldClient.cancel();
+  cancelIdleFieldWarm();
+  const generation = ++fieldGeneration;
+  activeFieldRequestKey = requestKey;
+  if (!background) fieldResidual.textContent = 'computing field…';
+
   try {
-    const geo = computeGeometry(solvedStackup);
-    const vp = (() => {
-      // same viewport the svg uses
-      return renderCrossSection(csSvg, solvedStackup, { outline: true });
-    })();
+    const geo = computeGeometry(stackup);
+    // Match the visible SVG without mutating it during idle precomputation.
+    const vp = computeViewport(geo);
     const scale = UNIT_SCALE.mils; // stackup units are canonical mils
     const bbox = {
       x0: vp.vx0 * scale,
@@ -242,35 +322,69 @@ async function computeFieldGrid() {
       .map((p) => p.pts.map(([x, y]): [number, number] => [x * scale, y * scale]));
     const progress = $('#cs-progress');
     const progressBar = $('#cs-progress-bar');
-    progress.classList.remove('d-none');
-    progressBar.style.width = '0%';
+    if (!background) {
+      progress.classList.remove('d-none');
+      progressBar.style.width = '0%';
+    }
+    let grid: FieldGrid & { lines: string[] };
     try {
-      fieldGridCache = await client.fieldGrid(
-        {
-          fieldText: s.lastSolve.fieldText,
-          lineIndex: parseInt(csDriven.value || '0', 10),
-          bbox,
-          nx,
-          ny,
-          masks,
-          maskPolys,
-        },
+      grid = await fieldClient.fieldGrid(
+        { fieldText, lineIndex, bbox, nx, ny, masks, maskPolys },
         (frac) => {
-          progressBar.style.width = `${Math.round(frac * 100)}%`;
+          if (!background && generation === fieldGeneration) {
+            progressBar.style.width = `${Math.round(frac * 100)}%`;
+          }
         },
       );
     } finally {
-      progress.classList.add('d-none');
+      if (!background && generation === fieldGeneration) progress.classList.add('d-none');
     }
+
+    // Termination and a final worker postMessage can race. Check every input
+    // again before accepting the transferred grid into the cache.
+    if (
+      generation !== fieldGeneration ||
+      solveKey !== fieldSolveKey ||
+      currentSolveKey() !== solveKey ||
+      store.get().lastSolve?.fieldText !== fieldText ||
+      parseInt(csDriven.value || '0', 10) !== lineIndex
+    ) {
+      return;
+    }
+    fieldGridCache = grid;
     fieldGridStale = false;
-    // populate driven-line selector
-    csDriven.innerHTML = fieldGridCache.lines
-      .map((n, i) => `<option value="${i}" ${String(i) === (csDriven.value || '0') ? 'selected' : ''}>drive: ${n}</option>`)
+    const selectedLine = Math.max(0, Math.min(lineIndex, grid.lines.length - 1));
+    const freeformLabels = store.get().mode === 'freeform';
+    csDriven.innerHTML = grid.lines
+      .map((n, i) => {
+        const label = freeformLabels ? n : `Line ${i + 1}`;
+        return `<option value="${i}" ${i === selectedLine ? 'selected' : ''}>drive: ${label}</option>`;
+      })
       .join('');
-    renderCS();
+    if (viewMode !== 'geom') renderCS();
   } catch (e) {
-    fieldResidual.textContent = (e as Error).message;
+    if (!background && generation === fieldGeneration) fieldResidual.textContent = (e as Error).message;
+  } finally {
+    if (generation === fieldGeneration) activeFieldRequestKey = null;
   }
+}
+
+/** Warm the grid only when the browser reports spare main-thread time.
+ * Browsers without requestIdleCallback retain the on-demand path. */
+function scheduleIdleFieldWarm() {
+  cancelIdleFieldWarm();
+  if (!('requestIdleCallback' in window) || !fieldGridStale || !fieldSolveKey) return;
+  const generation = fieldGeneration;
+  const solveKey = fieldSolveKey;
+  fieldIdleHandle = window.requestIdleCallback((deadline) => {
+    fieldIdleHandle = undefined;
+    if (generation !== fieldGeneration || solveKey !== fieldSolveKey || currentSolveKey() !== solveKey) return;
+    if (store.get().solving || client.busy || deadline.timeRemaining() < 8) {
+      scheduleIdleFieldWarm();
+      return;
+    }
+    void computeFieldGrid(true);
+  });
 }
 
 for (const [id, mode] of [
@@ -285,7 +399,7 @@ for (const [id, mode] of [
   });
 }
 csDriven.addEventListener('change', () => {
-  fieldGridStale = true;
+  invalidateFieldGrid();
   void computeFieldGrid();
 });
 
@@ -294,8 +408,10 @@ const btnSolve = $('#btn-solve') as HTMLButtonElement;
 const btnCancel = $('#btn-cancel') as HTMLButtonElement;
 const spinner = $('#solve-spinner');
 const solveNote = $('#solve-note');
+let solveGeneration = 0;
 
 async function doSolve() {
+  const generation = ++solveGeneration;
   const s = store.get();
   const stackup = currentStackup(s);
   const errors = validateStackup(stackup);
@@ -304,21 +420,32 @@ async function doSolve() {
     return;
   }
   solveNote.textContent = '';
+  // Invalidate any field reconstruction from the previous geometry before
+  // starting the primary BEM solve.
+  invalidateFieldGrid();
   store.update({ solving: true });
   btnSolve.disabled = true;
   spinner.classList.remove('d-none');
   btnCancel.classList.toggle('d-none', false);
   try {
     const xsctn = generateXsctn(stackup);
+    const solveKey = `${xsctn}|${stackup.cseg}|${stackup.dseg}`;
+    // mark this input as handled even if it fails: auto-solve must not
+    // retry an unchanged config in a loop
+    lastSolveKey = solveKey;
     const out = await client.solve(xsctn, stackup.cseg, stackup.dseg);
+    if (generation !== solveGeneration) return;
     solvedStackup = stackup;
-    fieldGridStale = true;
-    calcrlRefined = null; // measured R(f) belongs to the previous geometry
-    $('#calcrl-note').textContent = '';
+    fieldSolveKey = '';
+    fieldSolveKey = solveKey;
     (window as unknown as Record<string, unknown>).__tntweb = { out, stackup, xsctn };
     store.update({ lastSolve: out, solving: false });
-    if (viewMode !== 'geom') void computeFieldGrid();
+    if (out.ok && out.fieldText && currentSolveKey() === solveKey) {
+      if (viewMode !== 'geom') void computeFieldGrid();
+      else scheduleIdleFieldWarm();
+    }
   } catch (e) {
+    if (generation !== solveGeneration) return;
     store.update({
       lastSolve: {
         ok: false,
@@ -333,15 +460,57 @@ async function doSolve() {
       solving: false,
     });
   } finally {
+    if (generation !== solveGeneration) return;
     btnSolve.disabled = false;
     spinner.classList.add('d-none');
     btnCancel.classList.add('d-none');
+    if (autoSolveQueued) {
+      // edits arrived while this solve ran: pick up the latest state once
+      autoSolveQueued = false;
+      scheduleAutoSolve();
+    }
   }
+}
+
+/* auto-solve: first solve on load, then after every edit. Anti-thrash:
+ * a debounce coalesces bursts of edits, a signature check skips state
+ * changes that don't alter the solver input (units, plot settings, results),
+ * and while a solve is in flight new edits queue exactly one re-run. */
+const AUTO_SOLVE_DEBOUNCE_MS = 600;
+let autoSolveTimer: number | undefined;
+let autoSolveQueued = false;
+let lastSolveKey = '';
+
+function currentSolveKey(): string {
+  const s = store.get();
+  try {
+    const stackup = currentStackup(s);
+    return `${generateXsctn(stackup)}|${stackup.cseg}|${stackup.dseg}`;
+  } catch {
+    return lastSolveKey; // un-generatable state: leave auto-solve idle
+  }
+}
+
+function scheduleAutoSolve() {
+  window.clearTimeout(autoSolveTimer);
+  autoSolveTimer = window.setTimeout(() => {
+    if (currentSolveKey() === lastSolveKey) return;
+    if (store.get().solving) {
+      autoSolveQueued = true;
+      return;
+    }
+    void doSolve();
+  }, AUTO_SOLVE_DEBOUNCE_MS);
 }
 
 btnSolve.addEventListener('click', () => void doSolve());
 btnCancel.addEventListener('click', () => {
+  solveGeneration++;
   client.cancel();
+  invalidateFieldGrid();
+  // suppress the auto re-run of the config the user just cancelled
+  lastSolveKey = currentSolveKey();
+  autoSolveQueued = false;
   store.update({ solving: false });
   btnSolve.disabled = false;
   spinner.classList.add('d-none');
@@ -352,7 +521,7 @@ btnCancel.addEventListener('click', () => {
 /* ---------------- results + log ---------------- */
 function renderOutputs() {
   const s = store.get();
-  renderResults($('#tab-results'), s.lastSolve);
+  renderResults($('#results-summary'), $('#result-matrices'), s.lastSolve, s.mode === 'freeform');
   $('#log-stdout').textContent = s.lastSolve?.stdout || '—';
   $('#log-result').textContent = s.lastSolve?.resultText || '—';
   renderLoss();
@@ -371,8 +540,6 @@ function statCard(label: string, value: string, sub = ''): string {
   </div></div></div>`;
 }
 
-let calcrlRefined: RefinedR | null = null;
-
 function renderLoss() {
   const s = store.get();
   const plotEl = $('#loss-plot');
@@ -387,17 +554,20 @@ function renderLoss() {
   const cond = drivingConductor(solvedStackup);
   if (!cond) return;
   const firstDielectric = solvedStackup.items.find((i) => i.kind === 'DielectricLayer');
-  const tanD = firstDielectric && firstDielectric.kind === 'DielectricLayer' ? firstDielectric.lossTangent : 0;
+  let tanD = firstDielectric && firstDielectric.kind === 'DielectricLayer' ? firstDielectric.lossTangent : 0;
+  if (s.mode === 'preset' && s.presetKind === 'stripline' && s.presetParams.striplineSeparateMaterials) {
+    const p = s.presetParams;
+    tanD = striplineEffectiveLossTangent(p.er, p.h, p.tanD, p.er2, p.h2, p.tanD2);
+  }
   const diffMode = out.result.nSignals === 2 && out.result.zOdd != null;
-  const inputs = lossInputsFrom(out.result, cond, UNIT_SCALE.mils, tanD, diffMode);
+  const inputs = lossInputsFrom(out.result, cond, UNIT_SCALE[solvedStackup.units], tanD, diffMode);
   if (!inputs) {
     note.textContent = 'no loss inputs';
     return;
   }
-  const curve = lossCurve(inputs, s.lossParams, calcrlRefined);
+  const curve = lossCurve(inputs, s.lossParams);
   const modeLabel =
-    (diffMode ? 'odd mode, per line' : (out.result.names[0] ?? 'line 1')) +
-    (calcrlRefined ? ' — calcRL-refined R(f)' : '');
+    diffMode ? 'odd mode, per line' : (s.mode === 'freeform' ? (out.result.names[0] ?? 'line 1') : 'single-ended');
   renderLossPlot(plotEl, curve, s.lineLengthM, s.designFreqHz, modeLabel);
 
   const stats = computeLineStats(out.result, curve, s.lineLengthM, s.designFreqHz, diffMode);
@@ -426,18 +596,27 @@ $('#loss-rq').addEventListener('change', (e) => {
   renderLoss();
 });
 const updLength = () => {
-  const v = parseFloat(($('#loss-length') as HTMLInputElement).value) || 0;
+  const v = parseFloat(($('#loss-length') as HTMLInputElement).value);
+  if (!Number.isFinite(v) || v <= 0) return;
   const scale = parseFloat(($('#loss-length-unit') as HTMLSelectElement).value);
   store.update({ lineLengthM: Math.max(v * scale, 1e-6) });
   renderLoss();
 };
 $('#loss-length').addEventListener('change', updLength);
+$('#loss-length').addEventListener('input', updLength);
 $('#loss-length-unit').addEventListener('change', updLength);
+const updRiseTime = () => {
+  const v = parseFloat(($('#loss-rise') as HTMLInputElement).value);
+  if (!Number.isFinite(v) || v <= 0) return;
+  store.update({ riseTimePs: v });
+};
+$('#loss-rise').addEventListener('change', updRiseTime);
+$('#loss-rise').addEventListener('input', updRiseTime);
 const updFreq = () => {
   const v = parseFloat(($('#loss-freq') as HTMLInputElement).value) || 0;
   const scale = parseFloat(($('#loss-freq-unit') as HTMLSelectElement).value);
   store.update({ designFreqHz: Math.max(v * scale, 1e3) });
-  renderLoss();
+  renderOutputs();
 };
 $('#loss-freq').addEventListener('change', updFreq);
 $('#loss-freq-unit').addEventListener('change', updFreq);
@@ -446,66 +625,15 @@ $('#loss-freq-unit').addEventListener('change', updFreq);
 (() => {
   const s = store.get();
   const L = s.lineLengthM;
-  const [lv, lu] = L >= 1 ? [L, '1'] : L >= 0.01 ? [L * 100, '0.01'] : [L * 1000, '0.001'];
+  const [lv, lu] = L >= 1 ? [L, '1'] : L >= 0.1 ? [L * 100, '0.01'] : [L * 1000, '0.001'];
   ($('#loss-length') as HTMLInputElement).value = String(+lv.toPrecision(4));
   ($('#loss-length-unit') as HTMLSelectElement).value = lu;
+  ($('#loss-rise') as HTMLInputElement).value = String(+s.riseTimePs.toPrecision(4));
   const f = s.designFreqHz;
   const [fv, fu] = f >= 1e9 ? [f / 1e9, '1e9'] : [f / 1e6, '1e6'];
   ($('#loss-freq') as HTMLInputElement).value = String(+fv.toPrecision(4));
   ($('#loss-freq-unit') as HTMLSelectElement).value = fu;
 })();
-
-// plot needs a resize when its tab becomes visible
-document.querySelector('[data-bs-target="#tab-loss"]')?.addEventListener('shown.bs.tab', renderLoss);
-
-/* ---- calcRL refinement: measured skin+proximity R(f) ---- */
-const CALCRL_FREQS = [1e8, 3e8, 1e9, 3e9, 1e10, 3e10];
-const btnCalcRL = $('#btn-calcrl') as HTMLButtonElement;
-btnCalcRL.addEventListener('click', async () => {
-  const s = store.get();
-  const note = $('#calcrl-note');
-  if (!s.lastSolve?.ok || !solvedStackup) {
-    note.textContent = 'solve first';
-    return;
-  }
-  const geom = buildCalcRLGeometry(solvedStackup);
-  if (!geom) {
-    note.textContent = 'no signal conductors';
-    return;
-  }
-  const sigma = (drivingConductor(solvedStackup)?.conductivity ?? 5e7);
-  const diffMode = s.lastSolve.result!.nSignals === 2 && s.lastSolve.result!.zOdd != null;
-  btnCalcRL.disabled = true;
-  $('#calcrl-spinner').classList.remove('d-none');
-  try {
-    const { outs } = await client.calcRLSweep(
-      CALCRL_FREQS.map((f) => geom.inputFor(f, sigma)),
-      (frac) => (note.textContent = `computing… ${Math.round(frac * 100)}%`),
-    );
-    const fHz: number[] = [];
-    const rOhmPerM: number[] = [];
-    outs.forEach((text, i) => {
-      const rl = parseCalcRLOut(text, geom.nSignals);
-      if (!rl) return;
-      // mode resistance: odd mode = R11 - R12 for a pair, else R11
-      const r = diffMode && geom.nSignals >= 2 ? rl.R[0][0] - rl.R[0][1] : rl.R[0][0];
-      if (Number.isFinite(r) && r > 0) {
-        fHz.push(CALCRL_FREQS[i]);
-        rOhmPerM.push(r);
-      }
-    });
-    if (fHz.length < 3) throw new Error('calcRL returned too few valid points');
-    calcrlRefined = { fHz, rOhmPerM };
-    const flanks = solvedStackup.items.some((i) => isConductor(i) && i.isGround);
-    note.textContent = `refined at ${fHz.length} frequencies${flanks ? ' (CPW side grounds not modeled)' : ''}`;
-    renderLoss();
-  } catch (e) {
-    note.textContent = (e as Error).message;
-  } finally {
-    btnCalcRL.disabled = false;
-    $('#calcrl-spinner').classList.add('d-none');
-  }
-});
 
 /* ---------------- URL config + share ---------------- */
 // keep the URL hash in sync with the configuration (debounced replaceState:
@@ -540,7 +668,7 @@ btnShare.addEventListener('click', async () => {
   btnShare.textContent = copied ? 'Link copied ✓' : 'Copy failed — use the address bar';
   btnShare.classList.replace('btn-outline-primary', copied ? 'btn-success' : 'btn-warning');
   setTimeout(() => {
-    btnShare.textContent = 'Share';
+    btnShare.textContent = 'Share this configuration';
     btnShare.classList.remove('btn-success', 'btn-warning');
     btnShare.classList.add('btn-outline-primary');
   }, 1600);
@@ -549,9 +677,13 @@ btnShare.addEventListener('click', async () => {
 /* ---------------- store subscription ---------------- */
 let lastSolveRef: unknown = null;
 store.subscribe((s) => {
+  if (fieldSolveKey && currentSolveKey() !== fieldSolveKey && (!fieldGridStale || fieldClient.busy || fieldIdleHandle !== undefined)) {
+    invalidateFieldGrid();
+  }
   renderInputs();
   if (viewMode === 'geom') renderCS();
   syncUrlHash();
+  scheduleAutoSolve();
   if (s.lastSolve !== lastSolveRef) {
     lastSolveRef = s.lastSolve;
     renderOutputs();
@@ -567,3 +699,4 @@ if (store.get().mode === 'freeform') {
 renderInputs(true);
 renderCS();
 renderOutputs();
+void doSolve(); // solve the restored/shared config as soon as the page loads

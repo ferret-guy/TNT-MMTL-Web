@@ -4,13 +4,22 @@
   "version": "0.1.0",
   "type": "module",
   "description": "In-browser PCB trace impedance simulator powered by the MMTL/TNT boundary-element field solver compiled to WebAssembly",
+  "license": "GPL-2.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ferret-guy/TNT-MMTL-Web.git"
+  },
+  "engines": {
+    "node": ">=23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && npm run sanity",
     "golden": "node tests/golden/run-golden.mjs",
-    "sanity": "node tests/physics/sanity.mjs"
+    "sanity": "node tests/physics/sanity.mjs && node --test tests/physics/circle-trapezoid-dielectric-test.mjs tests/physics/etch-total-reduction-test.mjs tests/physics/losses-test.mjs tests/physics/parse-result-warning-test.mjs tests/physics/stripline-materials-test.mjs"
   },
   "devDependencies": {
     "@types/bootstrap": "^5.2.11",

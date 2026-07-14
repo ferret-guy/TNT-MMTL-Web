@@ -16,6 +16,16 @@
   font-size: 11px;
   fill: var(--bs-body-color);
 }
+.cs-dim-on-copper {
+  font-size: 8px;
+  font-weight: 700;
+  dominant-baseline: middle;
+  fill: #3d2b08;
+  paint-order: stroke;
+  stroke: rgba(255, 248, 225, 0.9);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
 .cs-dimline {
   stroke: var(--bs-secondary-color);
   stroke-width: 1;
@@ -49,26 +59,59 @@
   transition: box-shadow 120ms ease-out;
 }
 
-/* etch-factor mini diagram: dashed un-etched profile + copper trapezoid
-   whose sidewall slope tracks the etch factor */
+/* Etch mini diagram: an exaggerated trapezoid with the two widths whose
+   difference is the dimensional total etch reduction. */
 .etch-icon {
   display: block;
-}
-.etch-base {
-  stroke: var(--bs-secondary-color);
-  stroke-width: 1;
-}
-.etch-orig {
-  fill: none;
-  stroke: var(--bs-secondary-color);
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-  opacity: 0.7;
 }
 .etch-trap {
   fill: #e8b64c; /* matches the cross-section copper */
   stroke: #a97e17;
   stroke-width: 1;
+}
+.etch-dim {
+  fill: none;
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1;
+}
+.etch-icon-label {
+  fill: var(--bs-secondary-color);
+  font-size: 7.5px;
+  font-weight: 700;
+}
+
+/* primary geometry field mini diagrams */
+.field-icon {
+  display: block;
+}
+.field-icon-copper {
+  fill: #e8b64c;
+  stroke: #a97e17;
+  stroke-width: 1;
+}
+.field-icon-dielectric {
+  fill: #d8ecd8; /* matches the primary laminate in the cross-section */
+  stroke: #86a486;
+  stroke-width: 1;
+}
+.field-icon-mask {
+  fill: none;
+  stroke: #8aa5b8; /* matches the conformal solder-mask outline */
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.field-icon-dim {
+  fill: none;
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1;
+}
+
+.copper-weight-select {
+  max-width: 4.25rem;
+  min-width: 3.5rem;
+  padding-left: 0.35rem;
+  padding-right: 1.45rem;
 }
 
 /* charts */

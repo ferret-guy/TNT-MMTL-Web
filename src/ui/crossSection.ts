@@ -7,8 +7,9 @@
  *  - rectangles are left-aligned at cx; trapezoids are centered at
  *    cx + max(top,bottom)/2; circles center at cx + d/2 -- all span
  *    [cx, cx + maxWidth]
- *  - RectangleDielectric blocks sit on the current layer top (the parser
- *    parses but IGNORES their yOffset) at [xOffset, xOffset+width]
+ *  - dielectric blocks sit above the current layer top plus yOffset;
+ *    trapezoids are centered in max(topWidth,bottomWidth), matching the
+ *    conductor placement convention
  *  - domain (dielectric/ground extent) is x in [-totW, +2 totW], where
  *    totW = max over conductor sets of (xOffset + (n-1) pitch + maxWidth)
  *  - bottom ground plane at y=0; top ground plane (if 2) at the top of the
@@ -97,19 +98,42 @@ export function computeGeometry(s: Stackup): Geometry {
         break;
       }
       case 'RectangleDielectric': {
-        // parser ignores yOffset for blocks: they sit on the current layer top
+        const by = y + it.yOffset;
         polys.push({
           kind: 'block',
           item: it,
-          pts: rectPts(it.xOffset, y, it.xOffset + it.width, y + it.height),
+          pts: rectPts(it.xOffset, by, it.xOffset + it.width, by + it.height),
           x0: it.xOffset,
-          y0: y,
+          y0: by,
           x1: it.xOffset + it.width,
-          y1: y + it.height,
+          y1: by + it.height,
           isGroundConductor: false,
           er: it.permittivity,
         });
-        yMax = Math.max(yMax, y + it.height);
+        yMax = Math.max(yMax, by + it.height);
+        break;
+      }
+      case 'TrapezoidDielectric': {
+        const wmax = Math.max(it.topWidth, it.bottomWidth);
+        const cxc = it.xOffset + wmax / 2;
+        const by = y + it.yOffset;
+        const ty = by + it.height;
+        const bx0 = cxc - it.bottomWidth / 2;
+        const bx1 = cxc + it.bottomWidth / 2;
+        const tx0 = cxc - it.topWidth / 2;
+        const tx1 = cxc + it.topWidth / 2;
+        polys.push({
+          kind: 'block',
+          item: it,
+          pts: [[bx0, by], [bx1, by], [tx1, ty], [tx0, ty]],
+          x0: it.xOffset,
+          y0: by,
+          x1: it.xOffset + wmax,
+          y1: ty,
+          isGroundConductor: false,
+          er: it.permittivity,
+        });
+        yMax = Math.max(yMax, ty);
         break;
       }
       default: {
@@ -235,7 +259,9 @@ export function computeViewport(g: Geometry): Viewport {
     vx1 = Math.min(g.domainX1, (cx0 + cx1) / 2 + focus / 2);
   }
   const gt = Math.max(g.yTop * 0.04, 0.5);
-  const head = Math.max((g.yMax + gt) * 0.28, gt * 2); // callout headroom
+  // Three horizontal callout lanes are needed by differential CPW
+  // (width/ground width, coplanar gap, pair gap).
+  const head = Math.max((g.yMax + gt) * 0.38, gt * 2); // callout headroom
   const vy0 = -gt * 1.6;
   const vy1 = g.yMax + head;
   const w = vx1 - vx0;
@@ -268,6 +294,10 @@ export interface RenderOptions {
   onDimHover?: (fieldId: string, hovering: boolean) => void;
   /** display unit for callout labels (model values are mils) */
   displayUnit?: DimUnit;
+  /** preset mask thicknesses used for mask dimension callouts */
+  coverProfile?: { tCopper: number; tBase: number; tBetween: number };
+  /** active guided preset, used to map geometry-specific callouts */
+  presetKind?: 'microstrip' | 'stripline' | 'cpw';
 }
 
 export function renderCrossSection(
@@ -306,13 +336,24 @@ export function renderCrossSection(
     return el;
   };
 
-  // preset-generated conformal mask pieces render as ONE seamless outline
-  // (drawn last, translucent, sides angled like the copper) instead of a
-  // layer rect + lump rects with visible seams
+  // Preset-generated mask blocks render as one seamless profile instead of
+  // several touching rectangles with artificial internal strokes. The
+  // resulting polygon follows the exact same region tops used by the BEM.
+  const coverId = (p: PlacedPoly) =>
+    p.item != null && 'id' in p.item ? (p.item as { id: string }).id : '';
+  const isLegacyCoverPoly = (p: PlacedPoly) => /^cover(Layer|Lump)/.test(coverId(p));
+  const isCoverRegion = (p: PlacedPoly) => /^coverRegion/.test(coverId(p));
+  const isExactCoverPoly = (p: PlacedPoly) => /^cover(BaseLayer|Shoulder)/.test(coverId(p));
   const isCoverPoly = (p: PlacedPoly) =>
-    p.item != null && 'id' in p.item && /^cover(Layer|Lump)/.test((p.item as { id: string }).id);
-  const coverLayer = g.polys.find((p) => p.kind === 'layer' && isCoverPoly(p));
-  const coverLumps = g.polys.filter((p) => p.kind === 'block' && isCoverPoly(p));
+    isLegacyCoverPoly(p) || isCoverRegion(p) || isExactCoverPoly(p);
+  const coverLayer = g.polys.find((p) => p.kind === 'layer' && isLegacyCoverPoly(p));
+  const exactCoverLayer = g.polys.find(
+    (p) => p.kind === 'layer' && coverId(p) === 'coverBaseLayer',
+  );
+  const coverLumps = g.polys.filter((p) => p.kind === 'block' && isLegacyCoverPoly(p));
+  const coverRegions = g.polys
+    .filter((p) => p.kind === 'block' && isCoverRegion(p))
+    .sort((a, b) => a.x0 - b.x0);
 
   // layers first, then blocks, then grounds + conductors on top
   for (const p of g.polys.filter((p) => p.kind === 'layer' && !isCoverPoly(p))) {
@@ -320,6 +361,13 @@ export function renderCrossSection(
   }
   for (const p of g.polys.filter((p) => p.kind === 'block' && !isCoverPoly(p))) {
     poly(p.pts, erColor(p.er!, erMap), '#9fb2c0', `dielectric block εr = ${p.er}`);
+  }
+  // The production solve's tied C1/C3 base layer and mitered C2 shoulders are
+  // already the exact desired polygons. Paint those same polygons without
+  // internal strokes so they read as one conformal mask profile in the SVG.
+  for (const p of g.polys.filter(isExactCoverPoly)) {
+    const el = poly(p.pts, erColor(p.er!, erMap), 'none', `solder mask εr = ${p.er}`);
+    if (!outline) el.setAttribute('fill-opacity', '0.55');
   }
   for (const p of g.polys.filter((p) => p.kind === 'ground')) {
     poly(p.pts, 'url(#gndhatch)', '#5c6b7e', 'ground plane');
@@ -333,7 +381,25 @@ export function renderCrossSection(
     );
   }
 
-  if (coverLayer) {
+  if (coverRegions.length) {
+    const first = coverRegions[0];
+    const last = coverRegions[coverRegions.length - 1];
+    const pts: Array<[number, number]> = [
+      [first.x0, first.y0],
+      [first.x0, first.y1],
+    ];
+    for (let i = 0; i < coverRegions.length; i++) {
+      const region = coverRegions[i];
+      pts.push([region.x1, region.y1]);
+      const next = coverRegions[i + 1];
+      if (next && Math.abs(next.y1 - region.y1) > 1e-9) {
+        pts.push([region.x1, next.y1]);
+      }
+    }
+    pts.push([last.x1, last.y0]);
+    const el = poly(pts, erColor(first.er!, erMap), '#8aa5b8', `solder mask εr = ${first.er}`);
+    if (!outline) el.setAttribute('fill-opacity', '0.55');
+  } else if (coverLayer) {
     // side slope matched to the first signal trapezoid's etch angle
     const trap = s.items.find((i) => i.kind === 'TrapezoidConductors');
     const slope =
@@ -341,14 +407,51 @@ export function renderCrossSection(
         ? Math.max(0, (trap.bottomWidth - trap.topWidth) / (2 * trap.height))
         : 0;
     const yB = coverLayer.y0;
-    const yL = coverLayer.y1;
-    const pts: Array<[number, number]> = [[coverLayer.x0, yB], [coverLayer.x0, yL]];
-    for (const lump of [...coverLumps].sort((a, b) => a.x0 - b.x0)) {
-      const hl = lump.y1 - lump.y0;
-      const inset = Math.min(slope * hl, (lump.x1 - lump.x0) / 2 - 1e-9);
-      pts.push([lump.x0, yL], [lump.x0 + inset, lump.y1], [lump.x1 - inset, lump.y1], [lump.x1, yL]);
+    const pts: Array<[number, number]> = [];
+    const prof = opts.coverProfile;
+    if (prof) {
+      // true conformal profile: tBase on the laminate, tBetween in the gaps,
+      // tCopper riding over each conductor with etch-angled shoulders
+      const spans: Array<{ x0: number; x1: number; top: number }> = [];
+      for (const c of g.polys
+        .filter((q) => q.kind === 'conductor' && q.y0 >= yB - 1e-9)
+        .sort((a, b) => a.x0 - b.x0)) {
+        const last = spans[spans.length - 1];
+        if (last && c.x0 <= last.x1 + 2 * prof.tCopper) {
+          last.x1 = Math.max(last.x1, c.x1);
+          last.top = Math.max(last.top, c.y1);
+        } else spans.push({ x0: c.x0, x1: c.x1, top: c.y1 });
+      }
+      pts.push([coverLayer.x0, yB], [coverLayer.x0, yB + prof.tBase]);
+      let xPrev = coverLayer.x0;
+      const push = (x: number, y: number) => {
+        pts.push([Math.max(x, xPrev), y]); // keep the surface x-monotonic
+        xPrev = Math.max(x, xPrev);
+      };
+      for (let i = 0; i < spans.length; i++) {
+        const sp = spans[i];
+        const hIn = yB + (i === 0 ? prof.tBase : prof.tBetween);
+        const hOut = yB + (i === spans.length - 1 ? prof.tBase : prof.tBetween);
+        const hTop = sp.top + prof.tCopper;
+        const inset = Math.min(slope * (sp.top - yB), (sp.x1 - sp.x0) / 2 - 1e-9);
+        push(sp.x0 - prof.tCopper, hIn);
+        push(sp.x0 + inset, hTop);
+        push(sp.x1 - inset, hTop);
+        push(sp.x1 + prof.tCopper, hOut);
+      }
+      push(coverLayer.x1, yB + prof.tBase);
+      pts.push([coverLayer.x1, yB]);
+    } else {
+      // free-form: profile straight off the slab + lump solver geometry
+      const yL = coverLayer.y1;
+      pts.push([coverLayer.x0, yB], [coverLayer.x0, yL]);
+      for (const lump of [...coverLumps].sort((a, b) => a.x0 - b.x0)) {
+        const hl = lump.y1 - lump.y0;
+        const inset = Math.min(slope * hl, (lump.x1 - lump.x0) / 2 - 1e-9);
+        pts.push([lump.x0, yL], [lump.x0 + inset, lump.y1], [lump.x1 - inset, lump.y1], [lump.x1, yL]);
+      }
+      pts.push([coverLayer.x1, yL], [coverLayer.x1, yB]);
     }
-    pts.push([coverLayer.x1, yL], [coverLayer.x1, yB]);
     const el = poly(pts, erColor(coverLayer.er!, erMap), '#8aa5b8', `solder mask εr = ${coverLayer.er}`);
     if (!outline) el.setAttribute('fill-opacity', '0.55');
   }
@@ -373,6 +476,7 @@ export function renderCrossSection(
       ty: number,
       label: string,
       anchor = 'middle',
+      textClass = '',
     ) => {
       const grp = document.createElementNS(ns, 'g');
       grp.setAttribute('class', 'cs-dim-group');
@@ -391,11 +495,11 @@ export function renderCrossSection(
       t.setAttribute('x', String(tx));
       t.setAttribute('y', String(ty));
       t.setAttribute('text-anchor', anchor);
-      t.setAttribute('class', 'cs-dim');
+      t.setAttribute('class', `cs-dim${textClass ? ` ${textClass}` : ''}`);
       t.textContent = label;
       grp.appendChild(t);
       const tt = document.createElementNS(ns, 'title');
-      tt.textContent = 'click to edit';
+      tt.textContent = `${label}; click to edit`;
       grp.appendChild(tt);
       if (opts.onDimClick) grp.addEventListener('click', () => opts.onDimClick!(fieldId));
       if (opts.onDimHover) {
@@ -406,27 +510,91 @@ export function renderCrossSection(
     };
 
     const c0 = sigs[0] ?? conductors[0];
-    // w: above the first signal trace (headroom guaranteed by computeViewport)
-    const yW = sy(c0.y1) - 8;
+    const isCpw = opts.presetKind === 'cpw';
+    const groundStrips = conductors
+      .filter((c) => c.isGroundConductor)
+      .sort((a, b) => a.x0 - b.x0);
+    const leftGround = groundStrips
+      .filter((ground) => ground.x1 <= c0.x0 + 1e-9)
+      .at(-1);
+    const lastSignal = sigs[sigs.length - 1] ?? c0;
+    const rightGround = groundStrips.find(
+      (ground) => ground.x0 >= lastSignal.x1 - 1e-9,
+    );
+    // Keep horizontal dimensions in explicit lanes.  Narrow differential
+    // traces can have labels wider than both w and s, so relying on their x
+    // positions alone makes the two labels collide.
+    const topSurface = sy(c0.y1 + (opts.coverProfile?.tCopper ?? 0));
+    const yW = topSurface - 9;
+    const ySecondary = topSurface - 27;
+    const yTertiary = topSurface - 45;
     dim('pf-w', sx(c0.x0), yW, sx(c0.x1), yW,
         (sx(c0.x0) + sx(c0.x1)) / 2, yW - 4, `w = ${fmt(c0.x1 - c0.x0)} ${unitLabel}`);
     // s (gap) for 2 signals
     if (sigs.length >= 2) {
-      const yS = sy(sigs[0].y1) - 8;
+      const yS = ySecondary;
       dim('pf-s', sx(sigs[0].x1), yS, sx(sigs[1].x0), yS,
           (sx(sigs[0].x1) + sx(sigs[1].x0)) / 2, yS - 4, `s = ${fmt(sigs[1].x0 - sigs[0].x1)}`);
     }
-    // t: right of the first trace
-    const xT = sx(c0.x1) + 8;
+    // CPW-specific dimensions use the left ground/signal opening. Both
+    // flanks share the same width and gap fields, so one callout is enough.
+    if (isCpw && leftGround) {
+      const yCpw = sigs.length >= 2 ? yTertiary : ySecondary;
+      const widthGround = rightGround ?? leftGround;
+      dim('pf-cpwGroundWidth', sx(widthGround.x0), yCpw, sx(widthGround.x1), yCpw,
+          (sx(widthGround.x0) + sx(widthGround.x1)) / 2, yCpw - 4,
+          `wg = ${fmt(widthGround.x1 - widthGround.x0)}`);
+      dim('pf-cpwGap', sx(leftGround.x1), yCpw, sx(c0.x0), yCpw,
+          (sx(leftGround.x1) + sx(c0.x0)) / 2, yCpw - 4,
+          `g = ${fmt(c0.x0 - leftGround.x1)}`);
+    }
+    // t: centered on the copper instead of sharing the crowded mask lanes.
+    // The compact label deliberately omits the unit (w already establishes
+    // it); the full value remains available in the callout's SVG title.
+    const xT = (sx(c0.x0) + sx(c0.x1)) / 2;
+    const yT = (sy(c0.y0) + sy(c0.y1)) / 2;
     dim('pf-t', xT, sy(c0.y0), xT, sy(c0.y1),
-        xT + 4, (sy(c0.y0) + sy(c0.y1)) / 2 + 4, `t = ${fmt(c0.y1 - c0.y0)}`, 'start');
-    // h (first layer below conductors)
-    const firstLayer = g.polys.find((p) => p.kind === 'layer');
-    if (firstLayer) {
+        xT, yT, `t=${fmt(c0.y1 - c0.y0)}`, 'middle', 'cs-dim-on-copper');
+    // h is the substrate below the trace. Plain CPW has a synthetic air
+    // spacer below that substrate, so identify the preset layer by id rather
+    // than blindly dimensioning the first dielectric.
+    const hLayerId = opts.presetKind === 'stripline' ? 'sub1' : 'sub';
+    const hLayer = g.polys.find(
+      (p) => p.kind === 'layer' && p.item != null && 'id' in p.item && p.item.id === hLayerId,
+    ) ?? g.polys.find((p) => p.kind === 'layer');
+    if (hLayer) {
       const lx = sx(vp.vx1) - 12;
-      dim('pf-h', lx, sy(firstLayer.y0), lx, sy(firstLayer.y1),
-          lx - 4, (sy(firstLayer.y0) + sy(firstLayer.y1)) / 2 + 4,
-          `h = ${fmt(firstLayer.y1 - firstLayer.y0)}`, 'end');
+      dim('pf-h', lx, sy(hLayer.y0), lx, sy(hLayer.y1),
+          lx - 4, (sy(hLayer.y0) + sy(hLayer.y1)) / 2 + 4,
+          `h = ${fmt(hLayer.y1 - hLayer.y0)}`, 'end');
+      // Stripline h2 is measured from the copper top to the upper ground,
+      // not across the conductor thickness.
+      if (opts.presetKind === 'stripline') {
+        const upperLayer = g.polys.find(
+          (p) => p.kind === 'layer' && p.item != null && 'id' in p.item && p.item.id === 'sub2',
+        );
+        if (upperLayer && upperLayer.y1 > c0.y1) {
+          const lx2 = sx(vp.vx0) + 12;
+          dim('pf-h2', lx2, sy(c0.y1), lx2, sy(upperLayer.y1),
+              lx2 + 4, (sy(c0.y1) + sy(upperLayer.y1)) / 2 + 4,
+              `h₂ = ${fmt(upperLayer.y1 - c0.y1)}`, 'start');
+        }
+      }
+    }
+    // solder-mask thicknesses (preset cover on)
+    const coverBaseY = exactCoverLayer?.y0 ?? coverRegions[0]?.y0 ?? coverLayer?.y0;
+    if (opts.coverProfile && coverBaseY !== undefined) {
+      const prof = opts.coverProfile;
+      // over copper: left of the first signal trace (t sits on the right)
+      const xM = sx(c0.x0) - 8;
+      dim('pf-cover-cu', xM, sy(c0.y1), xM, sy(c0.y1 + prof.tCopper),
+          xM - 4, (sy(c0.y1) + sy(c0.y1 + prof.tCopper)) / 2 + 3,
+          `mask = ${fmt(prof.tCopper)}`, 'end');
+      // base thickness on the laminate: far left (h sits far right)
+      const xB = sx(vp.vx0) + 12;
+      dim('pf-cover-base', xB, sy(coverBaseY), xB, sy(coverBaseY + prof.tBase),
+          xB + 4, (sy(coverBaseY) + sy(coverBaseY + prof.tBase)) / 2 + 3,
+          `mask = ${fmt(prof.tBase)}`, 'start');
     }
   }
   return vp;

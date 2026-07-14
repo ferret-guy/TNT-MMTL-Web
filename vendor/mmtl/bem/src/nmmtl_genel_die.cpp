@@ -135,28 +135,14 @@ DELEMENTS_P nmmtl_generate_elements_die(DIELECTRIC_SEGMENTS_P ds,
     
     /* come up with real x,y pairs for endpoints of segment */
     
-    if(die_seg->orientation == VERTICAL_ORIENTATION)
+    nmmtl_die_seg_endpoints(die_seg,&endx[0],&endy[0],&endx[1],&endy[1]);
     {
-      
-      endx[0] = endx[1] = die_seg->at;
-      endy[0] = die_seg->start;
-      endy[1] = die_seg->end;
-      if(endy[0] < endy[1])
-	      normalx = -1.0;           /* segment points upward - normal to left */
-      else
-	      normalx = 1.0;
-      normaly = 0.0;
-    }
-    else  /* Horizontal orientation */
-    {
-      endy[0] = endy[1] = die_seg->at;
-      endx[0] = die_seg->start;
-      endx[1] = die_seg->end;
-      if(endx[0] < endx[1])
-	      normaly = 1.0;            /* segment points to right - normal is up */
-      else
-	      normaly = -1.0;
-      normalx = 0.0;
+      const double dx = endx[1]-endx[0];
+      const double dy = endy[1]-endy[0];
+      const double len = sqrt(dx*dx+dy*dy);
+      /* Every interface is directed so epsilonplus lies on its left. */
+      normalx = -dy/len;
+      normaly = dx/len;
     }
     
     /* Find any intersections with ends of segments already processed */
@@ -370,4 +356,3 @@ DELEMENTS_P nmmtl_generate_elements_die(DIELECTRIC_SEGMENTS_P ds,
   return(start);
   
 }
-

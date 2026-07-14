@@ -25,6 +25,13 @@ const TEMPLATES: Array<{ label: string; make: () => StackupItem }> = [
     make: () => ({ kind: 'RectangleDielectric', id: newId(), width: 20, height: 3, permittivity: 3.8, xOffset: 0, yOffset: 0 }),
   },
   {
+    label: 'Trapezoid dielectric',
+    make: () => ({
+      kind: 'TrapezoidDielectric', id: newId(), topWidth: 18, bottomWidth: 20,
+      height: 3, permittivity: 3.8, xOffset: 0, yOffset: 0,
+    }),
+  },
+  {
     label: 'Rectangle conductors',
     make: () => ({
       kind: 'RectangleConductors', id: newId(), isGround: false, conductivity: 5e7,
@@ -51,6 +58,7 @@ const KIND_LABEL: Record<StackupItem['kind'], string> = {
   GroundPlane: 'Ground plane',
   DielectricLayer: 'Dielectric layer',
   RectangleDielectric: 'Dielectric block',
+  TrapezoidDielectric: 'Trapezoid dielectric',
   RectangleConductors: 'Rect conductors',
   TrapezoidConductors: 'Trap conductors',
   CircleConductors: 'Circle conductors',
@@ -79,6 +87,16 @@ function fieldsFor(item: StackupItem): FieldSpec[] {
         { key: 'height', label: 'Height', dim: true },
         { key: 'permittivity', label: 'Permittivity εr' },
         { key: 'xOffset', label: 'X Offset', dim: true },
+        { key: 'yOffset', label: 'Y Offset', dim: true },
+      ];
+    case 'TrapezoidDielectric':
+      return [
+        { key: 'bottomWidth', label: 'Bottom Width', dim: true },
+        { key: 'topWidth', label: 'Top Width', dim: true },
+        { key: 'height', label: 'Height', dim: true },
+        { key: 'permittivity', label: 'Permittivity Îµr' },
+        { key: 'xOffset', label: 'X Offset', dim: true },
+        { key: 'yOffset', label: 'Y Offset', dim: true },
       ];
     case 'RectangleConductors':
       return [

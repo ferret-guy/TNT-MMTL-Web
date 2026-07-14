@@ -1,6 +1,25 @@
-build/
+# Dependencies and generated output
 node_modules/
 dist/
+build/
+coverage/
 *.o
+*.tsbuildinfo
+
+# Tool caches and local launch settings
 .vite/
+.claude/
 vite.config.ts.timestamp-*
+__pycache__/
+*.py[cod]
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+
+# OS metadata
+.DS_Store
+Thumbs.db

@@ -59,6 +59,52 @@
  *******************************************************************
  */
 
+/* A conductor edge can cross the cancelled join between two touching
+   dielectric primitives with the same epsilon (for example the flat mask
+   base and its trapezoid shoulder).  No dielectric interface remains to
+   fracture the conductor at that join, so no single primitive contains the
+   whole edge even though their union does.  Recognize that uniform union at
+   several points along the straight segment before falling back to AIR. */
+static int nmmtl_seg_in_uniform_die_union(DIELECTRICS_P dielectrics,
+                                          LINESEG_P line,
+                                          float *constant)
+{
+  static const double samples[] = {0.0, 0.25, 0.5, 0.75, 1.0};
+  DIELECTRICS_P candidate;
+  int sample;
+
+  for(candidate = dielectrics; candidate != NULL; candidate = candidate->next)
+  {
+    int all_covered = TRUE;
+    for(sample = 0; sample < 5 && all_covered; ++sample)
+    {
+      const double t = samples[sample];
+      LINESEG point;
+      DIELECTRICS_P scan;
+      int covered = FALSE;
+
+      point.x[0] = point.x[1] = line->x[0] + t * (line->x[1] - line->x[0]);
+      point.y[0] = point.y[1] = line->y[0] + t * (line->y[1] - line->y[0]);
+      for(scan = dielectrics; scan != NULL; scan = scan->next)
+      {
+        if(fabs(scan->constant - candidate->constant) < 1.0e-6 &&
+           nmmtl_seg_in_die_rect(scan,&point))
+        {
+          covered = TRUE;
+          break;
+        }
+      }
+      all_covered = covered;
+    }
+    if(all_covered)
+    {
+      *constant = candidate->constant;
+      return(TRUE);
+    }
+  }
+  return(FALSE);
+}
+
 
 /*
   
@@ -165,10 +211,19 @@ int nmmtl_orphans(CIRCLE_SEGMENTS_P *conductor_cs,
 	   die region - then, die == NULL and this is an error */
 	if(die == NULL)
 	{
-	  printf("ELECTRO-W-ORPHAN_CS Cannot find dielectric constant for conductor line segment over (%f,%f) to (%f,%f).  Setting to AIR.\n",
-		  ls->startx,ls->starty,ls->endx,ls->endy);
-	  ls->epsilon[0] = AIR_CONSTANT;
-	  ls->epsilon[1] = AIR_CONSTANT;
+	  float union_constant;
+	  if(nmmtl_seg_in_uniform_die_union(dielectrics,&LS,&union_constant))
+	  {
+	    ls->epsilon[0] = union_constant;
+	    ls->epsilon[1] = union_constant;
+	  }
+	  else
+	  {
+	    printf("ELECTRO-W-ORPHAN_CS Cannot find dielectric constant for conductor line segment over (%f,%f) to (%f,%f).  Setting to AIR.\n",
+		    ls->startx,ls->starty,ls->endx,ls->endy);
+	    ls->epsilon[0] = AIR_CONSTANT;
+	    ls->epsilon[1] = AIR_CONSTANT;
+	  }
 	  
 	}       /* if didn't find an enclosing die */
 	

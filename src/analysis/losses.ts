@@ -78,27 +78,30 @@ export interface LossInputs {
   perimeterM: number;
 }
 
+/**
+ * Effective stripline dielectric loss for unlike upper/lower laminates.
+ * The εr / clearance weighting is the electric-energy participation of the
+ * parallel-path limit and closely tracks the BEM result for typical traces.
+ */
+export function striplineEffectiveLossTangent(
+  lowerEr: number,
+  lowerHeight: number,
+  lowerTanD: number,
+  upperEr: number,
+  upperHeight: number,
+  upperTanD: number,
+): number {
+  const lowerWeight = lowerEr > 0 && lowerHeight > 0 ? lowerEr / lowerHeight : 0;
+  const upperWeight = upperEr > 0 && upperHeight > 0 ? upperEr / upperHeight : 0;
+  const totalWeight = lowerWeight + upperWeight;
+  return totalWeight > 0
+    ? (lowerWeight * lowerTanD + upperWeight * upperTanD) / totalWeight
+    : 0;
+}
+
 const NP_TO_DB = 8.685889638;
 
-/** measured R(f) points from calcRL (mode resistance, ohm/m) */
-export interface RefinedR {
-  fHz: number[];
-  rOhmPerM: number[];
-}
-
-/** log-log interpolation of the refined R(f) (clamped at the ends) */
-function refinedRAt(ref: RefinedR, fHz: number): number {
-  const xs = ref.fHz;
-  if (fHz <= xs[0]) return ref.rOhmPerM[0] * Math.sqrt(fHz / xs[0]); // sqrt-f below range
-  if (fHz >= xs[xs.length - 1])
-    return ref.rOhmPerM[xs.length - 1] * Math.sqrt(fHz / xs[xs.length - 1]);
-  let i = 1;
-  while (xs[i] < fHz) i++;
-  const t = (Math.log(fHz) - Math.log(xs[i - 1])) / (Math.log(xs[i]) - Math.log(xs[i - 1]));
-  return Math.exp(Math.log(ref.rOhmPerM[i - 1]) * (1 - t) + Math.log(ref.rOhmPerM[i]) * t);
-}
-
-export function lossCurve(inp: LossInputs, p: LossParams, refined?: RefinedR | null): LossCurve {
+export function lossCurve(inp: LossInputs, p: LossParams): LossCurve {
   const out: LossCurve = {
     fHz: [],
     alphaC: [],
@@ -117,9 +120,7 @@ export function lossCurve(inp: LossInputs, p: LossParams, refined?: RefinedR | n
     const f = 10 ** (logMin + ((logMax - logMin) * i) / (n - 1));
     const delta = skinDepthM(f, inp.sigma);
     const k = roughnessK(p.roughnessModel, rqM, delta, p.hurayRatio);
-    // skin-effect term: analytic isolated-conductor Rs sqrt(f), or the
-    // calcRL-measured R(f) (true skin + proximity) when a refinement ran
-    const rSkin = refined ? refinedRAt(refined, f) : Math.sqrt(Math.PI * f * MU0 / inp.sigma) / inp.perimeterM;
+    const rSkin = Math.sqrt(Math.PI * f * MU0 / inp.sigma) / inp.perimeterM;
     const r = Math.sqrt(inp.rdcPerM ** 2 + (k * rSkin) ** 2);
     const g = 2 * Math.PI * f * inp.cPerM * inp.tanD;
     const aC = (r / (2 * inp.z0)) * NP_TO_DB;

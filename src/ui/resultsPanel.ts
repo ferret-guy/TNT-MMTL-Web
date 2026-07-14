@@ -1,6 +1,4 @@
-/**
- * Results tab: key figures + matrices, formatted with sensible units.
- */
+/** Key figures and field-solver matrices, formatted with sensible units. */
 import type { SolveOutput, SolveResult } from '../model/types.ts';
 
 const esc = (s: string) =>
@@ -28,13 +26,17 @@ function matrixTable(title: string, unitLabel: string, names: string[], M: numbe
     </table></div>`;
 }
 
-function xtalkTable(title: string, list: SolveResult['fxt']): string {
+function xtalkTable(
+  title: string,
+  list: SolveResult['fxt'],
+  displayName: (name: string) => string,
+): string {
   if (!list.length) return '';
   const rows = list
     .map(
       (x) =>
-        `<tr><td>${esc(x.active)} → ${esc(x.passive)}</td><td>${eng(x.value)}</td><td>${
-          x.dB == null ? '—∞' : x.dB.toFixed(1)
+        `<tr><td>${esc(displayName(x.active))} → ${esc(displayName(x.passive))}</td><td>${eng(x.value)}</td><td>${
+          x.dB == null ? '−∞' : x.dB.toFixed(1)
         } dB</td></tr>`,
     )
     .join('');
@@ -45,21 +47,33 @@ function xtalkTable(title: string, list: SolveResult['fxt']): string {
     </table></div>`;
 }
 
-export function renderResults(container: HTMLElement, out: SolveOutput | null) {
+export function renderResults(
+  summaryContainer: HTMLElement,
+  matricesContainer: HTMLElement,
+  out: SolveOutput | null,
+  showAdvancedNames = false,
+) {
   if (!out) {
-    container.innerHTML = `<p class="text-body-secondary mb-0">No results yet — press <strong>Solve</strong>.</p>`;
+    summaryContainer.innerHTML = `<p class="text-body-secondary mb-0">No results yet — press <strong>Solve</strong>.</p>`;
+    matricesContainer.innerHTML = '';
     return;
   }
   if (!out.ok || !out.result) {
-    container.innerHTML = `
+    summaryContainer.innerHTML = `
       <div class="alert alert-danger"><strong>Solve failed.</strong>
         ${out.error ? `<div class="font-monospace small mt-1">${esc(out.error)}</div>` : ''}
-        <div class="small mt-1">See the Log tab for solver output.</div>
+        <div class="small mt-1">See the Log section for solver output.</div>
       </div>`;
+    matricesContainer.innerHTML = '';
     return;
   }
   const r = out.result;
   const diff = r.nSignals === 2 && r.zOdd != null && r.zEven != null;
+  const resultNames = showAdvancedNames ? r.names : r.names.map((_, i) => `Line ${i + 1}`);
+  const displayName = (name: string) => {
+    const i = r.names.indexOf(name);
+    return i >= 0 ? (resultNames[i] ?? name) : name;
+  };
 
   const cards: string[] = [];
   const card = (label: string, value: string, sub = '') =>
@@ -75,7 +89,11 @@ export function renderResults(container: HTMLElement, out: SolveOutput | null) {
     card('Common-mode Z', `${(r.zEven! / 2).toFixed(2)} Ω`, 'Z<sub>comm</sub> = Z<sub>even</sub>/2');
   }
   r.z0.forEach((z, i) =>
-    card(diff ? `Z₀ line ${i + 1} (isolated)` : `Characteristic impedance Z₀`, `${z.toFixed(2)} Ω`, esc(r.names[i] ?? '')),
+    card(
+      diff ? `Z₀ line ${i + 1} (isolated)` : 'Impedance',
+      `${z.toFixed(2)} Ω`,
+      showAdvancedNames ? esc(r.names[i] ?? '') : '',
+    ),
   );
   if (r.epsEff.length) card('Effective εr', r.epsEff.map((e) => e.toFixed(3)).join(' / '));
   if (r.delay.length)
@@ -85,39 +103,26 @@ export function renderResults(container: HTMLElement, out: SolveOutput | null) {
       diff && r.delayOdd != null ? `odd ${(r.delayOdd * 1e10).toFixed(2)} / even ${(r.delayEven! * 1e10).toFixed(2)} ps/cm` : '',
     );
 
-  // The solver always prints "lossTangent and frequency are not used": its
-  // BEM is quasi-static (L/C/Rdc from field geometry only). We explain that
-  // properly below instead of echoing the alarming raw warning.
-  const realWarnings = r.warnings.filter(
-    (w) => !/lossTangent and frequency/i.test(w) && !/^\*+$/.test(w),
-  );
+  // The solver always prints "lossTangent and frequency are not used". Hide
+  // that implementation warning and show only its useful validity threshold.
+  const realWarnings = r.warnings
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0 && !/lossTangent and frequency/i.test(w) && !/^\*+$/.test(w));
   const warn = realWarnings.length
     ? `<div class="alert alert-warning py-2 small mt-2 mb-0">${realWarnings.map(esc).join('<br>')}</div>`
     : '';
 
-  const minF = `<p class="small text-body-secondary mt-2 mb-0">
-       The field solve is <strong>quasi-static</strong>: it computes L, C and R<sub>dc</sub> from the
-       electrostatic field only — frequency and loss tangent do not enter the solver (they feed the
-       analytic loss model on the Loss tab instead).${
-         r.minFreqMHz
-           ? ` The L/C values assume fully developed skin effect (current on the conductor surfaces),
-       which for this cross-section holds above ≈${eng(r.minFreqMHz, 3)} MHz — that bound is physics,
-       not a setting: it is where the skin depth shrinks below the smallest conductor dimension, so
-       only thicker/wider copper (or lower conductivity) lowers it. Below it, inductance is slightly
-       underestimated.`
-           : ''
-       }</p>`;
-
-  container.innerHTML = `
+  summaryContainer.innerHTML = `
     <div class="row row-cols-2 row-cols-xl-3 g-2">${cards.join('')}</div>
     ${warn}
-    ${matrixTable('Capacitance matrix B', 'pF/m', r.names, r.B, 1e12)}
-    ${matrixTable('Inductance matrix L', 'nH/m', r.names, r.L, 1e9)}
-    ${matrixTable('DC resistance R<sub>dc</sub>', 'Ω/m', r.names, r.Rdc)}
-    ${xtalkTable('Far-end (forward) crosstalk', r.fxt)}
-    ${xtalkTable('Near-end (backward) crosstalk', r.bxt)}
-    ${r.fxt.length ? '<p class="small text-body-secondary mb-0">Crosstalk assumes matched terminations (no reflections), per the solver.</p>' : ''}
-    ${minF}
+  `;
+
+  matricesContainer.innerHTML = `
+    ${matrixTable('Capacitance matrix B', 'pF/m', resultNames, r.B, 1e12)}
+    ${matrixTable('Inductance matrix L', 'nH/m', resultNames, r.L, 1e9)}
+    ${matrixTable('DC resistance R<sub>dc</sub>', 'Ω/m', resultNames, r.Rdc)}
+    ${xtalkTable('Far-end (forward) crosstalk', r.fxt, displayName)}
+    ${xtalkTable('Near-end (backward) crosstalk', r.bxt, displayName)}
     <p class="small text-body-secondary mt-1 mb-0">Solve time: ${out.elapsedMs} ms</p>
   `;
 }

@@ -425,6 +425,8 @@ int nmmtl_parse_graphic(char *filename,
 	  d_temp->constant = 1.0;   // Default to 1.0 if no -permittivity attribute in the file..
 	  d_temp->tangent = 0.0;    // Default to 0 since this is not used in calculations.
 	  d_temp->x0 = d_temp->x1 = 0;
+	  d_temp->top_x0 = d_temp->top_x1 = 0;
+	  d_temp->primitive = RECTANGLE;
           //-----------------------------------------------------
 	  // Process this dielectric until a line is read without the "\" character.
           //-----------------------------------------------------
@@ -500,6 +502,7 @@ int nmmtl_parse_graphic(char *filename,
 	  d_temp->next = NULL;
 	  d_temp->constant = 1.0;   // Default to 1.0 if no -permittivity attribute in the file..
 	  d_temp->tangent = 0.0;    // Default to 0 since this is not used in calculations.
+	  d_temp->primitive = RECTANGLE;
 
 	  // Set the default number of RectangleDielectric to 1
 	  number = 1;
@@ -595,10 +598,12 @@ int nmmtl_parse_graphic(char *filename,
 	      // d_temp.x1  - right x coordinate of the rectangle
 	      // d_temp.y1  - upper y coordinate of the rectangle
 	      //------------------------------------------------
-	      d_temp->x0 = xOffset;
+	      d_temp->x0 = cx;
 	      d_temp->x1 = d_temp->x0 + width;
-	      d_temp->y0 = yCoord;
-	      d_temp->y1 = yCoord + height;
+	      d_temp->top_x0 = d_temp->x0;
+	      d_temp->top_x1 = d_temp->x1;
+	      d_temp->y0 = yCoord + yOffset;
+	      d_temp->y1 = d_temp->y0 + height;
 	      
 	      /* insert dielectric onto plain list */
 	      d_temp->next = *dielectrics;
@@ -615,6 +620,72 @@ int nmmtl_parse_graphic(char *filename,
 		minimum_dimension = height;
 
 	      cx += pitch;
+	    }
+	}
+      //-----------------------------------------------------
+      // Is this a trapezoid dielectric?
+      //-----------------------------------------------------
+      else if ( strstr (line, "pezoidDielec") != NULL )
+	{
+	  double botWidth = 0.0, topWidth = 0.0, height = 0.0;
+	  double xOffset = 0.0, yOffset = 0.0, pitch = 0.0;
+	  float permittivity = 1.0F;
+	  int indx, number = 1;
+
+	  while (1)
+	    {
+	      if ( strstr (line, "-topWidth") != NULL ) {
+		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
+		conversion(tmp,meters,topWidth);
+	      }
+	      if ( strstr (line, "-bottomWidth") != NULL ) {
+		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
+		conversion(tmp,meters,botWidth);
+	      }
+	      if ( strstr (line, "-height") != NULL ) {
+		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
+		conversion(tmp,meters,height);
+	      }
+	      if ( strstr (line, "-permittivity") != NULL ) sscanf(line,"%*s %f",&permittivity);
+	      if ( strstr (line, "-number") != NULL ) sscanf(line,"%*s %d",&number);
+	      if ( strstr (line, "-xOff") != NULL ) {
+		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
+		conversion(tmp,meters,xOffset);
+	      }
+	      if ( strstr (line, "-yOff") != NULL ) {
+		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
+		conversion(tmp,meters,yOffset);
+	      }
+	      if ( strstr (line, "-pitch") != NULL ) {
+		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
+		conversion(tmp,meters,pitch);
+	      }
+	      if ((strrchr(line,'\\')) == 0) break;
+	      if (fgets(line,GPGE_MAX,inpf) == NULL) return 0;
+	    }
+
+	  const double maxWidth = topWidth > botWidth ? topWidth : botWidth;
+	  for (indx = 0; indx < number; ++indx)
+	    {
+	      const double left = xOffset + indx * pitch;
+	      const double center = left + maxWidth * 0.5;
+	      d_temp = (struct dielectric *)malloc(sizeof(struct dielectric));
+	      d_temp->next = *dielectrics;
+	      d_temp->primitive = POLYGON;
+	      d_temp->constant = permittivity;
+	      d_temp->tangent = 0.0F;
+	      d_temp->x0 = center - botWidth * 0.5;
+	      d_temp->x1 = center + botWidth * 0.5;
+	      d_temp->top_x0 = center - topWidth * 0.5;
+	      d_temp->top_x1 = center + topWidth * 0.5;
+	      d_temp->y0 = yCoord + yOffset;
+	      d_temp->y1 = d_temp->y0 + height;
+	      *dielectrics = d_temp;
+	      if(d_temp->y1 > highest_dielectric) highest_dielectric = d_temp->y1;
+	      if(d_temp->y0 < offset) offset = d_temp->y0;
+	      const double side = sqrt((d_temp->top_x0-d_temp->x0)*(d_temp->top_x0-d_temp->x0) + height*height);
+	      if(height < minimum_dimension) minimum_dimension = height;
+	      if(side < minimum_dimension) minimum_dimension = side;
 	    }
 	}
       //-----------------------------------------------------
@@ -963,6 +1034,8 @@ int nmmtl_parse_graphic(char *filename,
 	{
 	  d_temp->x0 = -totWidth;
 	  d_temp->x1 = d_temp->x0 + 3.0 * totWidth;
+	  d_temp->top_x0 = d_temp->x0;
+	  d_temp->top_x1 = d_temp->x1;
 	}
       d_temp = d_temp->next;
     }
@@ -1108,12 +1181,10 @@ int nmmtl_parse_graphic(char *filename,
     printf ("* Warning: There isn't a groundplane\n");
     printf ("************************************\n");
   }
-  
+
   *half_minimum_dimension = 0.5 * minimum_dimension;
   
   /* all done, return status of close_files */
   fclose (inpf);
   return (SUCCESS);
 }
-
-

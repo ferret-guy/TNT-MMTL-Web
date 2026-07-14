@@ -30,10 +30,7 @@ interface BemModule {
   callMain(args: string[]): number;
 }
 
-let calcrlUrl = new URL('/wasm/calcrl.mjs', self.location.href).href; // dev fallback
-
 let factory: ((opts: object) => Promise<BemModule>) | null = null;
-let calcrlFactory: ((opts: object) => Promise<BemModule>) | null = null;
 
 async function getFactory() {
   if (!factory) {
@@ -41,35 +38,6 @@ async function getFactory() {
     factory = mod.default;
   }
   return factory!;
-}
-
-async function getCalcRLFactory() {
-  if (!calcrlFactory) {
-    const mod = await import(/* @vite-ignore */ calcrlUrl);
-    calcrlFactory = mod.default;
-  }
-  return calcrlFactory!;
-}
-
-/** one calcRL run (single frequency) in a fresh module instance */
-async function calcRLOnce(inputText: string): Promise<string> {
-  const create = await getCalcRLFactory();
-  const mod = await create({
-    print: () => {},
-    printErr: () => {},
-    locateFile: (f: string, prefix: string) =>
-      f.endsWith('.wasm') ? new URL('calcrl.wasm', calcrlUrl).href : prefix + f,
-  });
-  mod.FS.mkdir('/work');
-  mod.FS.writeFile('/work/case.in', inputText);
-  mod.FS.chdir('/work');
-  try {
-    mod.callMain(['/work/case']);
-  } catch (e) {
-    const err = e as { name?: string };
-    if (err?.name !== 'ExitStatus') throw e;
-  }
-  return mod.FS.readFile('/work/case.out', { encoding: 'utf8' });
 }
 
 export interface SolveRequest {
@@ -140,23 +108,7 @@ self.onmessage = async (ev: MessageEvent) => {
   try {
     if (msg.cmd === 'init') {
       bemUrl = msg.bemUrl;
-      if (msg.calcrlUrl) calcrlUrl = msg.calcrlUrl;
       factory = null; // re-import against the new URL if needed
-      calcrlFactory = null;
-      return;
-    }
-    if (msg.cmd === 'calcRLSweep') {
-      const inputs = msg.inputs as string[];
-      const outs: string[] = [];
-      for (let i = 0; i < inputs.length; i++) {
-        outs.push(await calcRLOnce(inputs[i]));
-        (self as unknown as Worker).postMessage({
-          id: msg.id,
-          evt: 'progress',
-          frac: (i + 1) / inputs.length,
-        });
-      }
-      (self as unknown as Worker).postMessage({ id: msg.id, outs });
       return;
     }
     if (msg.cmd === 'solve') {

@@ -41,6 +41,18 @@ Functions contained herein:
 
 #include "nmmtl.h"
 
+static int nmmtl_point_in_cirseg_range_tol(CIRCLE_SEGMENTS_P cirseg,
+                                           double x, double y)
+{
+  double theta = atan2(y - cirseg->centery, x - cirseg->centerx);
+  const double tolerance = 256.0 * DBL_EPSILON;
+  if(theta < 0.0) theta += 2.0 * PI;
+  if(cirseg->endangle - cirseg->startangle >= 2.0 * PI - tolerance)
+    return(TRUE);
+  return(theta >= cirseg->startangle - tolerance &&
+         theta <= cirseg->endangle + tolerance);
+}
+
 /*
 *******************************************************************
 **  STRUCTURE DECLARATIONS AND TYPE DEFINTIONS
@@ -784,6 +796,86 @@ int nmmtl_cirseg_seg_inter(CIRCLE_SEGMENTS_P cirseg,
   
 
   *tangent = FALSE;
+
+  /* The legacy vertical/horizontal branches are retained byte-for-byte for
+     existing rectangular stackups.  Use the orientation-independent form
+     only for genuinely sloped dielectric interfaces. */
+  if(seg->x[1] != seg->x[0] && seg->y[1] != seg->y[0]) {
+    const double dx = seg->x[1] - seg->x[0];
+    const double dy = seg->y[1] - seg->y[0];
+    const double length2 = dx * dx + dy * dy;
+    const double radius2 = cirseg->radius * cirseg->radius;
+    double projection, closest_x, closest_y, closest_distance2;
+    double clearance, tolerance2;
+    double roots[2];
+    POINT accepted[2];
+    int accepted_count = 0;
+    int root_count, root_index;
+
+    if(length2 <= 0.0) return(0);
+    projection = ((cirseg->centerx - seg->x[0]) * dx +
+                  (cirseg->centery - seg->y[0]) * dy) / length2;
+    closest_x = seg->x[0] + projection * dx;
+    closest_y = seg->y[0] + projection * dy;
+    closest_distance2 =
+      (closest_x - cirseg->centerx) * (closest_x - cirseg->centerx) +
+      (closest_y - cirseg->centery) * (closest_y - cirseg->centery);
+    clearance = radius2 - closest_distance2;
+    tolerance2 = 256.0 * DBL_EPSILON *
+      (radius2 > closest_distance2 ? radius2 : closest_distance2);
+
+    if(clearance < -tolerance2) return(0);
+    if(fabs(clearance) <= tolerance2) {
+      roots[0] = projection;
+      root_count = 1;
+    } else {
+      const double offset = sqrt(clearance / length2);
+      roots[0] = projection - offset;
+      roots[1] = projection + offset;
+      root_count = 2;
+    }
+
+    for(root_index = 0; root_index < root_count; ++root_index) {
+      const double parameter_tolerance = 256.0 * DBL_EPSILON;
+      double t = roots[root_index];
+      POINT point;
+      if(t < -parameter_tolerance || t > 1.0 + parameter_tolerance)
+        continue;
+      if(t < 0.0) t = 0.0;
+      if(t > 1.0) t = 1.0;
+      point.x = seg->x[0] + t * dx;
+      point.y = seg->y[0] + t * dy;
+      if(!nmmtl_point_in_cirseg_range_tol(cirseg, point.x, point.y))
+        continue;
+
+      if(accepted_count == 0) {
+        accepted[accepted_count++] = point;
+      } else {
+        const double separation = hypot(point.x - accepted[0].x,
+                                        point.y - accepted[0].y);
+        const double scale = cirseg->radius + sqrt(length2);
+        if(separation > 256.0 * DBL_EPSILON * scale)
+          accepted[accepted_count++] = point;
+      }
+    }
+
+    /* Preserve the legacy root order (lower coordinate first), independent
+       of the direction in which the dielectric segment was authored. */
+    if(accepted_count == 2) {
+      const int swap = fabs(dx) >= fabs(dy) ?
+        accepted[0].x > accepted[1].x : accepted[0].y > accepted[1].y;
+      if(swap) {
+        const POINT temporary = accepted[0];
+        accepted[0] = accepted[1];
+        accepted[1] = temporary;
+      }
+    }
+    if(accepted_count > 0) *intersection1 = accepted[0];
+    if(accepted_count > 1) *intersection2 = accepted[1];
+    num_intersections = accepted_count;
+    if(root_count == 1 && num_intersections == 1) *tangent = TRUE;
+    return(num_intersections);
+  }
 
   /* check for vertical */
 

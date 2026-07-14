@@ -57,12 +57,14 @@ done
 
 # ---- 4. link (locally, then copy: Dropbox locks in-place renames on /mnt/d) ----
 echo "== linking bem.mjs"
+# Keep memory growth without exposing resizable heap views to browser APIs.
 em++ -O2 "$OUT"/obj/*.o "$LIBF2C/libf2c.a" \
   -o "$OUT/bem.mjs" \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createBemModule \
   -sENVIRONMENT=web,worker,node \
   -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 \
-  -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sSTACK_SIZE=4194304 \
+  -sALLOW_MEMORY_GROWTH=1 -sGROWABLE_ARRAYBUFFERS=0 \
+  -sINITIAL_MEMORY=67108864 -sSTACK_SIZE=4194304 \
   -sEXPORTED_RUNTIME_METHODS=FS,callMain \
   -sASSERTIONS=0 2> "$OUT/link.log" || { cat "$OUT/link.log"; exit 1; }
 if grep -q "signature mismatch" "$OUT/link.log"; then

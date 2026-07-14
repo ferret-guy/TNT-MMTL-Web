@@ -86,7 +86,10 @@ export function parseResult(text) {
       continue;
     }
     if (/^\*+/.test(line) || /^Warning/i.test(line)) {
-      warnings.push(line.replace(/^\*+\s*/, ''));
+      const warning = line.replace(/^\*+\s*/, '').trim();
+      // The native report uses rows of asterisks as section separators.
+      // They match the warning prefix but carry no message.
+      if (warning) warnings.push(warning);
       continue;
     }
 
