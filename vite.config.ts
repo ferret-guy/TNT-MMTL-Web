@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 export default defineConfig({
@@ -11,6 +11,12 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      input: {
+        main: resolve('index.html'),
+        about: resolve('about.html'),
+      },
+    },
   },
   worker: {
     format: 'es',

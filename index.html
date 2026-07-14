@@ -9,13 +9,13 @@
   <body>
     <nav class="navbar navbar-expand bg-body-tertiary border-bottom mb-3">
       <div class="container-fluid">
-        <span class="navbar-brand fw-bold">TNT-MMTL Web</span>
+        <a class="navbar-brand fw-bold" href="./">TNT-MMTL Web</a>
         <span class="navbar-text small d-none d-md-inline">
           PCB trace impedance — MMTL boundary-element field solver in WebAssembly
         </span>
-        <button class="btn btn-sm btn-outline-primary ms-auto" id="btn-share"
+        <a class="nav-link ms-auto me-3" href="./about.html">About</a>
+        <button class="btn btn-sm btn-outline-primary" id="btn-share"
                 title="copy a link that opens this exact configuration">Share this configuration</button>
-        <span class="ms-3 small text-body-secondary" id="solver-status">solver: loading…</span>
       </div>
     </nav>
 
@@ -37,6 +37,7 @@
               <span class="spinner-border spinner-border-sm d-none" id="solve-spinner"></span>
               Solve
             </button>
+            <span class="small text-body-secondary" id="solver-status">solver: loading...</span>
             <button class="btn btn-outline-danger d-none" id="btn-cancel">Cancel</button>
             <span class="small text-body-secondary" id="solve-note"></span>
           </div>
@@ -167,7 +168,7 @@
       </div>
     </main>
     <footer class="container-fluid px-3 pb-3">
-      <p class="small text-body-secondary text-center mb-0">Made with love (and AI) by Mark Omo</p>
+      <p class="small text-body-secondary text-center mb-0">Made by Mark Omo</p>
     </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" role="img" aria-labelledby="title desc">
+  <title id="title">JLC04161H-3313 outside and internal trace positions</title>
+  <desc id="desc">Two cross-sections of the JLCPCB 3313 four-layer stackup. The left shows an outside L1 microstrip referenced to L2. The right shows an L2 stripline referenced to L1 and L3.</desc>
+  <defs>
+    <pattern id="ground" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#8b98a8"/><line x1="0" y1="0" x2="0" y2="8" stroke="#5b6878" stroke-width="3"/>
+    </pattern>
+    <style>
+      text { font-family: system-ui, sans-serif; fill: #263343; }
+      .panel { fill: #fff; stroke: #b9c4d1; }
+      .heading { font-size: 17px; font-weight: 700; }
+      .sub { font-size: 12px; fill: #5f6d7c; }
+      .label { font-size: 11px; font-weight: 650; }
+      .small { font-size: 10px; fill: #536171; }
+      .pp { fill: #d8ecd8; stroke: #a7bea7; }
+      .core { fill: #cfe4f4; stroke: #9db9ce; }
+      .signal { fill: #e8b64c; stroke: #9d741c; }
+      .muted-cu { fill: #efd188; stroke: #b89037; }
+      .ground { fill: url(#ground); stroke: #526071; }
+    </style>
+  </defs>
+
+  <rect class="panel" x="10" y="10" width="430" height="320" rx="5"/>
+  <text class="heading" x="30" y="40">Outside trace on L1</text>
+  <text class="sub" x="30" y="59">Microstrip referenced to L2</text>
+  <rect class="pp" x="30" y="100" width="390" height="28"/>
+  <rect class="ground" x="30" y="128" width="390" height="7"/>
+  <rect class="core" x="30" y="135" width="390" height="126"/>
+  <rect class="muted-cu" x="30" y="261" width="390" height="7"/>
+  <rect class="pp" x="30" y="268" width="390" height="28"/>
+  <rect class="muted-cu" x="30" y="296" width="390" height="8"/>
+  <path class="signal" d="M200 91 L250 91 L254 100 L196 100 Z"/>
+  <text class="label" x="225" y="84" text-anchor="middle">L1 signal, w 0.1491 mm</text>
+  <text class="small" x="40" y="117">3313 prepreg, 0.0994 mm</text>
+  <text class="small" x="40" y="141">L2 reference plane</text>
+  <text class="small" x="40" y="203">core, 1.265 mm</text>
+  <text class="small" x="40" y="280">3313, 0.0994 mm</text>
+  <text class="small" x="391" y="266" text-anchor="end">L3</text>
+  <text class="small" x="391" y="302" text-anchor="end">L4</text>
+
+  <rect class="panel" x="460" y="10" width="430" height="320" rx="5"/>
+  <text class="heading" x="480" y="40">Internal trace on L2</text>
+  <text class="sub" x="480" y="59">Asymmetric stripline referenced to L1 and L3</text>
+  <rect class="ground" x="480" y="91" width="390" height="8"/>
+  <rect class="pp" x="480" y="99" width="390" height="35"/>
+  <rect class="core" x="480" y="134" width="390" height="127"/>
+  <rect class="ground" x="480" y="261" width="390" height="7"/>
+  <rect class="pp" x="480" y="268" width="390" height="28"/>
+  <rect class="muted-cu" x="480" y="296" width="390" height="8"/>
+  <path class="signal" d="M650 127 L700 127 L702 134 L648 134 Z"/>
+  <text class="label" x="675" y="120" text-anchor="middle">L2 signal, w 0.1330 mm</text>
+  <text class="small" x="490" y="97">L1 reference plane</text>
+  <text class="small" x="490" y="115">above, 0.0994 mm</text>
+  <text class="small" x="490" y="201">below, 1.265 mm</text>
+  <text class="small" x="490" y="266">L3 reference plane</text>
+  <text class="small" x="490" y="280">3313, 0.0994 mm</text>
+  <text class="small" x="841" y="302" text-anchor="end">L4</text>
+</svg>

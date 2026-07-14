@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About TNT-MMTL Web</title>
+    <meta name="description" content="WebAssembly port of the open-source TNT-MMTL transmission-line field solver." />
+  </head>
+  <body class="about-page">
+    <nav class="about-nav border-bottom">
+      <div class="container about-container d-flex align-items-center py-3">
+        <a class="navbar-brand fw-bold mb-0" href="./">TNT-MMTL Web</a>
+        <div class="ms-auto d-flex gap-3 small">
+          <a href="./">Calculator</a>
+          <a href="./about.html" aria-current="page">About</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="container about-container py-5">
+      <header class="about-intro">
+        <h1>WebAssembly Port of the Open Source TNT-MMTL Solver</h1>
+        <p class="lead">
+          A high-accuracy field solver for PCB and transmission-line cross-sections that runs locally in your browser.
+        </p>
+        <p class="mb-0">
+          <a class="btn btn-primary" href="./">Open the calculator</a>
+        </p>
+      </header>
+
+      <hr />
+
+      <section aria-labelledby="what-heading">
+        <h2 id="what-heading">What TNT-MMTL Is</h2>
+        <p>
+          TNT-MMTL was developed from <a href="https://sppdglab.mayo.edu/about-sppdg/history.html" target="_blank" rel="noopener noreferrer">Mayo Clinic transmission-line research</a> beginning in the 1980s and was <a href="https://mmtl.sourceforge.net/" target="_blank" rel="noopener noreferrer">publicly released under the GPL in 2004</a>. It is a <a href="https://mmtl.sourceforge.net/user-guide/node8.html" target="_blank" rel="noopener noreferrer">2-D/2.5-D field solver</a> for trace impedance, propagation, crosstalk, and conductor coupling.
+        </p>
+        <p>
+          It uses a boundary-element and method-of-moments field solution. It's as accurate as expensive commercial tools like <a href="https://www.polarinstruments.com/products/si/Si9000.html" target="_blank" rel="noopener noreferrer">Polar SI9000e</a>.
+        </p>
+        <p>
+          The implementation is open source and inspectable.
+        </p>
+      </section>
+
+      <hr />
+
+      <section aria-labelledby="geometry-heading">
+        <h2 id="geometry-heading">Arbitrary Geometry and Dielectric Regions</h2>
+        <p>
+          TNT-MMTL is much more flexible than formula-based open-source impedance calculators. It can model the cross-section that is actually being manufactured instead of forcing it into one predefined geometry.
+        </p>
+        <ul>
+          <li>Mixed and stacked core, prepreg, resin, solder-mask, coating, and air-adjacent dielectric regions</li>
+          <li>A pure-resin region across, above, or beside a trace</li>
+          <li>Asymmetric stripline with different materials or distances above and below the conductor</li>
+          <li>Rectangular, etched-trapezoid, or circular conductors</li>
+          <li>Multiple signal and ground conductors with coupling and modal impedance results</li>
+        </ul>
+        <p><a href="./">Open the free-form stackup editor</a></p>
+      </section>
+
+      <hr />
+
+      <section aria-labelledby="ipc-heading">
+        <h2 id="ipc-heading">Why Use a Field Solver?</h2>
+        <p>
+          IPC-style back-of-the-envelope trace-impedance equations are useful for rough estimates, but they can be materially inaccurate once the geometry, copper profile, coating, or dielectric construction moves away from their narrow assumptions. TNT-MMTL solves the electric field around the actual cross-section, making it suitable for checking and refining those estimates before fabrication.
+        </p>
+      </section>
+
+      <hr />
+
+      <section aria-labelledby="jlc-heading">
+        <h2 id="jlc-heading">JLCPCB Dielectric Support</h2>
+        <p>
+          This tool has JLCPCB-specific material support, including construction/thickness-dependent dielectric-constant references and frequency-dependent dielectric-loss models. JLCPCB currently uses <strong>Nan Ya NP-155F</strong> for 4-8-layer impedance calculations and <strong>Shengyi S1000-2M</strong> for 10-layer and higher constructions.
+        </p>
+        <ul>
+          <li><a href="https://jlcpcb.com/help/article/user-guide-to-the-jlcpcb-impedance-calculator" target="_blank" rel="noopener noreferrer">JLCPCB impedance-calculator material tables</a></li>
+          <li><a href="https://ccl.npc.com.tw/cclfile/pdt/Datasheet_NP-155F_1761637097200.pdf?v=51221" target="_blank" rel="noopener noreferrer">Nan Ya NP-155FR datasheet</a></li>
+          <li><a href="https://www.syst.com.cn/en/Product/info_257.aspx?itemid=11623" target="_blank" rel="noopener noreferrer">Shengyi S1000-2M material page</a></li>
+        </ul>
+      </section>
+
+      <hr />
+
+      <section aria-labelledby="examples-heading">
+        <h2 id="examples-heading">Example JLCPCB Four-Layer Stackups</h2>
+        <p>
+          Each diagram shows the outside L1 trace and the L2 stripline in their actual positions in the same four-layer construction. The links open nominal 50 ohm examples at 1 GHz using the NP-155F family model.
+        </p>
+
+        <article class="about-example">
+          <h3>JLC04161H-3313</h3>
+          <p>1.56 mm finished thickness, +/- 10%. Uses 0.0994 mm 3313 RC57 prepreg above and below a 1.265 mm core.</p>
+          <img src="./jlc-3313-l1-l2.svg" alt="JLC04161H-3313 cross-sections showing an outside L1 microstrip and an L2 stripline between its reference planes" width="900" height="340" />
+          <ul class="about-example-links">
+            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=5.871&amp;t=1.6&amp;h=3.91339&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L1 outside microstrip - w 0.1491 mm</a></li>
+            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=5.236&amp;t=0.598425&amp;h=49.8031&amp;h2=3.91339&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L2 stripline - w 0.1330 mm</a></li>
+          </ul>
+        </article>
+
+        <article class="about-example">
+          <h3>JLC04161H-7628</h3>
+          <p>1.59 mm finished thickness, +/- 10%. Uses 0.2104 mm 7628 RC49 prepreg above and below a 1.065 mm core.</p>
+          <img src="./jlc-7628-l1-l2.svg" alt="JLC04161H-7628 cross-sections showing an outside L1 microstrip and an L2 stripline between its reference planes" width="900" height="340" />
+          <ul class="about-example-links">
+            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=13.86&amp;t=1.6&amp;h=8.28346&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L1 outside microstrip - w 0.3520 mm</a></li>
+            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=11.01&amp;t=0.598425&amp;h=41.9291&amp;h2=8.28346&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L2 stripline - w 0.2797 mm</a></li>
+          </ul>
+        </article>
+
+      </section>
+
+    </main>
+
+    <footer class="border-top">
+      <div class="container about-container py-4 small text-body-secondary text-center">Made by Mark Omo</div>
+    </footer>
+    <script type="module" src="/src/about.ts"></script>
+  </body>
+</html>
