@@ -1,4 +1,4 @@
-# TNT-MMTL Web
+# Web-MMTL
 
 Browser-based PCB transmission-line solver for single-ended and differential
 microstrip, stripline, coplanar, and free-form cross-sections. The 2-D
@@ -22,7 +22,7 @@ Serve `dist/` with any static host, or run `npm run preview`.
 
 ## Solver and license
 
-The solver is [MMTL/TNT](https://mmtl.sourceforge.net/) from the Mayo Special
+The solver is [MMTL](https://mmtl.sourceforge.net/) from the Mayo Special
 Purpose Processor Development Group, compiled to WebAssembly. This project is
 GPL-2.0-or-later; see `vendor/mmtl/COPYING`. Vendored solver changes are
 summarized in `PATCHES.md`.

@@ -1,9 +1,9 @@
 {
-  "name": "tnt-web",
+  "name": "web-mmtl",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "In-browser PCB trace impedance simulator powered by the MMTL/TNT boundary-element field solver compiled to WebAssembly",
+  "description": "In-browser PCB trace impedance simulator powered by the MMTL boundary-element field solver compiled to WebAssembly",
   "license": "GPL-2.0-or-later",
   "repository": {
     "type": "git",

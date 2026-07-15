@@ -70,7 +70,7 @@ export function renderLossPlot(
     {
       responsive: true,
       displaylogo: false,
-      toImageButtonOptions: { filename: 'tnt-web-loss', scale: 2 },
+      toImageButtonOptions: { filename: 'web-mmtl-loss', scale: 2 },
     },
   );
 }
