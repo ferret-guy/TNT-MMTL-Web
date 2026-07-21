@@ -59,6 +59,19 @@ history.
    truncated mid-line. `.result` and the dump file were already closed
    explicitly.
 
+## vendor/mmtl/bem/src/nmmtl_combine_die.cpp
+
+7. **Dielectric interfaces are reclassified from the completed material
+   geometry after the legacy top/bottom/side merge.** The original rectangle
+   merger can leave zero-length or dielectric-to-air fragments between
+   touching same-permittivity trapezoids. Those fragments make the BEM matrix
+   singular when a rounded dielectric is represented by a small, contiguous
+   trapezoid decomposition. The added pass samples both sides of each merged
+   segment, removes zero-contrast/zero-length interfaces, and retains the
+   physical material boundary. This supports the frontend's exact-bounds
+   octagonal approximation for circular cable insulation without adding a new
+   native file-format primitive.
+
 ## Debug instrumentation (inactive unless -DTNTWEB_GEOM_TRACE)
 
 `nmmtl_intersections.cpp`, `nmmtl_det_intersections.cpp`, and

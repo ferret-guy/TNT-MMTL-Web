@@ -39,6 +39,33 @@ export interface AppState {
 const LS_KEY = 'tnt-web-state-v3';
 const CFG_VERSION = 3;
 
+/**
+ * Add the loss property introduced for finite dielectric shapes without
+ * breaking saved states and shared links created before it existed.
+ */
+export function normalizeFreeformDielectricLosses(stackup: Stackup): Stackup {
+  const items = Array.isArray(stackup.items) ? stackup.items : [];
+  return {
+    ...stackup,
+    items: items.map((item) => {
+      if (
+        item.kind !== 'DielectricLayer' &&
+        item.kind !== 'RectangleDielectric' &&
+        item.kind !== 'TrapezoidDielectric' &&
+        item.kind !== 'CircleDielectric'
+      ) {
+        return item;
+      }
+      const stored = (item as typeof item & { lossTangent?: unknown }).lossTangent;
+      return {
+        ...item,
+        lossTangent:
+          typeof stored === 'number' && Number.isFinite(stored) ? stored : 0,
+      };
+    }),
+  };
+}
+
 /** the shareable/persistable subset of the state */
 function persistable(s: AppState) {
   const { lastSolve: _ls, solving: _sv, ...keep } = s;
@@ -103,6 +130,10 @@ export function encodeConfig(s: AppState): string {
       q.set('etch_delta', String(+etch.toPrecision(6)));
     if (p.cpwBottomGround !== defs.cpwBottomGround) q.set('cpw_bottom_gnd', p.cpwBottomGround ? '1' : '0');
     if (s.presetKind === 'stripline' && p.striplineSeparateMaterials) q.set('split_lam', '1');
+    if (!p.referencePlaneSameWeight) {
+      q.set('ref_same_wt', '0');
+      q.set('ref_t', String(+p.referencePlaneThickness.toPrecision(6)));
+    }
     const dCover = defs.cover;
     if (!!p.cover !== !!dCover) q.set('mask', p.cover ? '1' : '0');
     if (p.cover) {
@@ -120,6 +151,11 @@ export function encodeConfig(s: AppState): string {
   if (s.designFreqHz !== d.designFreqHz) q.set('f_hz', String(s.designFreqHz));
   if (s.lossParams.roughnessModel !== d.lossParams.roughnessModel) q.set('rough', s.lossParams.roughnessModel);
   if (s.lossParams.roughnessRqUm !== d.lossParams.roughnessRqUm) q.set('rq_um', String(s.lossParams.roughnessRqUm));
+  if (s.lossParams.hurayRadiusUm !== d.lossParams.hurayRadiusUm) q.set('huray_r_um', String(s.lossParams.hurayRadiusUm));
+  if (s.lossParams.hurayRatio !== d.lossParams.hurayRatio) q.set('huray_sr', String(s.lossParams.hurayRatio));
+  if (s.lossParams.includeReferencePlaneLoss !== d.lossParams.includeReferencePlaneLoss) {
+    q.set('ref_loss', s.lossParams.includeReferencePlaneLoss ? '1' : '0');
+  }
   return q.toString();
 }
 
@@ -141,7 +177,9 @@ export function decodeHash(hash: string): Partial<AppState> | null {
     out.mode = 'freeform';
     try {
       const stack = JSON.parse(q.get('stack') ?? '');
-      if (stack && Array.isArray(stack.items)) out.freeform = stack;
+      if (stack && Array.isArray(stack.items)) {
+        out.freeform = normalizeFreeformDielectricLosses(stack as Stackup);
+      }
     } catch {
       /* bad stack JSON: ignore */
     }
@@ -168,6 +206,14 @@ export function decodeHash(hash: string): Partial<AppState> | null {
       const etchDelta = num('etch_delta');
       if (etchDelta !== null) p.etch = Math.max(0, etchDelta);
       p.etch = etchReductionOf(p.w, p.etch);
+      const referenceThickness = num('ref_t');
+      p.referencePlaneSameWeight =
+        q.get('ref_same_wt') !== '0' && referenceThickness === null;
+      p.referencePlaneThickness = p.referencePlaneSameWeight
+        ? p.t
+        : referenceThickness !== null && referenceThickness > 0
+          ? referenceThickness
+          : p.t;
       if (q.has('cpw_bottom_gnd')) p.cpwBottomGround = q.get('cpw_bottom_gnd') !== '0';
       if (q.get('mask') === '0') p.cover = null;
       else if (q.get('mask') === '1' && !p.cover) p.cover = { ...DEFAULT_COVER };
@@ -197,14 +243,34 @@ export function decodeHash(hash: string): Partial<AppState> | null {
   if (f !== null) out.designFreqHz = f;
   const rough = q.get('rough');
   const rq = num('rq_um');
-  if (rough || rq !== null) {
+  const hurayRadius = num('huray_r_um');
+  const hurayRatio = num('huray_sr');
+  const referenceLoss = q.get('ref_loss');
+  if (
+    rough ||
+    rq !== null ||
+    hurayRadius !== null ||
+    hurayRatio !== null ||
+    referenceLoss !== null
+  ) {
     const d = defaultState();
     out.lossParams = {
       ...d.lossParams,
       ...(rough && ['none', 'hammerstad', 'huray'].includes(rough)
         ? { roughnessModel: rough as LossParams['roughnessModel'] }
         : {}),
-      ...(rq !== null ? { roughnessRqUm: rq } : {}),
+      ...(rq !== null ? { roughnessRqUm: Math.max(0, rq) } : {}),
+      // Compatibility with links created by the earlier shared-Rq Huray UI:
+      // its implementation interpreted the Rq value as a nodule diameter.
+      ...(hurayRadius !== null
+        ? { hurayRadiusUm: Math.max(0, hurayRadius) }
+        : rough === 'huray' && rq !== null
+          ? { hurayRadiusUm: Math.max(0, rq / 2) }
+          : {}),
+      ...(hurayRatio !== null ? { hurayRatio: Math.max(0, hurayRatio) } : {}),
+      ...(referenceLoss !== null
+        ? { includeReferencePlaneLoss: referenceLoss !== '0' }
+        : {}),
     };
   }
   return out;
@@ -231,19 +297,50 @@ function mergeOverDefaults(saved: Partial<AppState>): AppState {
     couplingLengthM: lineLengthM,
     riseTimePs,
   };
+  presetParams.referencePlaneSameWeight =
+    savedPreset?.referencePlaneSameWeight !== false;
+  presetParams.referencePlaneThickness = presetParams.referencePlaneSameWeight
+    ? presetParams.t
+    : positive(savedPreset?.referencePlaneThickness)
+      ? savedPreset.referencePlaneThickness
+      : presetParams.t;
   presetParams.etch = etchReductionOf(presetParams.w, presetParams.etch);
   presetParams.cover = presetParams.cover ? normalizeCover(presetParams.cover) : null;
-  const freeform = {
+  const freeform = normalizeFreeformDielectricLosses({
     ...d.freeform,
     ...(saved.freeform ?? {}),
     couplingLengthM: lineLengthM,
     riseTimePs,
+  });
+  const rawLoss = { ...d.lossParams, ...(saved.lossParams ?? {}) };
+  const nonnegative = (value: unknown, fallback: number) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+  const fMinHz = positive(rawLoss.fMinHz) ? rawLoss.fMinHz : d.lossParams.fMinHz;
+  const fMaxHz = positive(rawLoss.fMaxHz) && rawLoss.fMaxHz >= fMinHz
+    ? rawLoss.fMaxHz
+    : Math.max(fMinHz, d.lossParams.fMaxHz);
+  const lossParams: LossParams = {
+    includeReferencePlaneLoss:
+      typeof rawLoss.includeReferencePlaneLoss === 'boolean'
+        ? rawLoss.includeReferencePlaneLoss
+        : d.lossParams.includeReferencePlaneLoss,
+    roughnessModel: ['none', 'hammerstad', 'huray'].includes(rawLoss.roughnessModel)
+      ? rawLoss.roughnessModel
+      : d.lossParams.roughnessModel,
+    roughnessRqUm: nonnegative(rawLoss.roughnessRqUm, d.lossParams.roughnessRqUm),
+    hurayRadiusUm: nonnegative(rawLoss.hurayRadiusUm, d.lossParams.hurayRadiusUm),
+    hurayRatio: nonnegative(rawLoss.hurayRatio, d.lossParams.hurayRatio),
+    fMinHz,
+    fMaxHz,
+    nPoints: typeof rawLoss.nPoints === 'number' && Number.isFinite(rawLoss.nPoints)
+      ? Math.max(2, Math.round(rawLoss.nPoints))
+      : d.lossParams.nPoints,
   };
   return {
     ...d,
     ...saved,
     presetParams,
-    lossParams: { ...d.lossParams, ...(saved.lossParams ?? {}) },
+    lossParams,
     freeform,
     lineLengthM,
     riseTimePs,
@@ -274,11 +371,16 @@ export function defaultState(): AppState {
     presetParams: defaultParams('microstrip', 'se'),
     freeform: defaultFreeform(),
     lossParams: {
-      roughnessModel: 'hammerstad',
+      includeReferencePlaneLoss: true,
+      // Roughness is material/foil-specific. Defaulting to smooth avoids
+      // inventing a surface measurement the user did not supply.
+      roughnessModel: 'none',
       roughnessRqUm: 1.0,
+      hurayRadiusUm: 0.5,
       hurayRatio: 2.2,
       fMinHz: 1e6,
-      fMaxHz: 1e11,
+      // The bundled dispersive JLC material anchors stop at 10 GHz.
+      fMaxHz: 1e10,
       nPoints: 160,
     },
     displayUnit: 'mils',

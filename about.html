@@ -57,7 +57,63 @@
           <li>Rectangular, etched-trapezoid, or circular conductors</li>
           <li>Multiple signal and ground conductors with coupling and modal impedance results</li>
         </ul>
-        <p><a href="./">Open the free-form stackup editor</a></p>
+      </section>
+
+      <hr />
+
+      <section aria-labelledby="cable-examples-heading">
+        <h2 id="cable-examples-heading">Free-form Examples</h2>
+        <p>
+          This solver supports free-form geometries. These examples use that flexibility to calculate cable impedance from physical dimensions and dielectric properties.
+        </p>
+        <p class="mb-4"><a href="./">Open the free-form stackup editor</a></p>
+
+        <div class="row row-cols-1 g-3 mt-1">
+          <article class="col">
+            <div class="card about-cable-card h-100 shadow-sm">
+              <div class="card-body about-cable-layout">
+                <a class="about-cable-preview" href="./" data-freeform-example="ribbon" aria-label="Open the Ribbon cable example">
+                  <svg data-freeform-preview="ribbon" width="640" height="300" role="img"></svg>
+                </a>
+                <div class="about-cable-copy">
+                  <h3 class="about-cable-title">
+                    <a href="./" data-freeform-example="ribbon">Ribbon cable</a>
+                  </h3>
+                  <p class="card-text">
+                    The <a href="https://catalog.belden.com/techdata/EN/9R28014_techdata.pdf" target="_blank" rel="noopener noreferrer">Belden 9R280 datasheet</a> specifies 28 AWG, 7x36 tinned-copper conductors on 1.27 mm pitch in a 0.914 mm body. A ground-signal-ground group is nominally 105 ohm.
+                  </p>
+                  <p class="card-text">
+                    The model uses equivalent-area 0.336 mm conductors in a rounded 0.914 mm PVC body, with <a href="https://www.matweb.com/search/datasheet.aspx?matguid=d43783c4603b449b90807908b8fdcea9" target="_blank" rel="noopener noreferrer">representative flexible PVC</a> at er = 2.89 and estimated tan(delta) = 0.048. It predicts the specified value to within 0.5%.
+                  </p>
+                  <p class="card-text mb-0">
+                    <a href="./" data-freeform-example="ribbon-many-port">Open the 5-signal, 6-ground many-port ribbon example</a>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="col">
+            <div class="card about-cable-card h-100 shadow-sm">
+              <div class="card-body about-cable-layout">
+                <a class="about-cable-preview" href="./" data-freeform-example="cat5" aria-label="Open the Cat5e twisted-pair example">
+                  <svg data-freeform-preview="cat5" width="640" height="300" role="img"></svg>
+                </a>
+                <div class="about-cable-copy">
+                  <h3 class="about-cable-title">
+                    <a href="./" data-freeform-example="cat5">Cat5e twisted pair</a>
+                  </h3>
+                  <p class="card-text">
+                    The <a href="https://catalog.belden.com/techdata/EN/1583ANS_techdata.pdf" target="_blank" rel="noopener noreferrer">Belden 1583ANS datasheet</a> specifies 24 AWG solid copper, a 0.89 mm PE-insulated diameter, and 100 ohm nominal impedance.
+                  </p>
+                  <p class="card-text">
+                    The model uses 0.511 mm copper conductors inside rounded 0.89 mm PE sleeves at the insulated-diameter spacing, with <a href="https://www.lyondellbasell.com/en/polymers/p/Alathon-M5370RF/065ea9ad-754f-4297-ab35-e1767f6f434b" target="_blank" rel="noopener noreferrer">representative PE</a> at er = 2.34 and estimated tan(delta) = 0.00002. It predicts the specified value to within 4.8%.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
       </section>
 
       <hr />
@@ -78,28 +134,39 @@
 
       <section aria-labelledby="examples-heading">
         <h2 id="examples-heading">Example JLCPCB Four-Layer Stackups</h2>
-        <p>
-          Each diagram shows the outside L1 trace and the L2 stripline in their actual positions in the same four-layer construction. The links open nominal 50 ohm examples at 1 GHz using the NP-155F family model.
-        </p>
 
         <article class="about-example">
           <h3>JLC04161H-3313</h3>
           <p>1.56 mm finished thickness, +/- 10%. Uses 0.0994 mm 3313 RC57 prepreg above and below a 1.265 mm core.</p>
-          <img src="./jlc-3313-l1-l2.svg" alt="JLC04161H-3313 cross-sections showing an outside L1 microstrip and an L2 stripline between its reference planes" width="900" height="340" />
-          <ul class="about-example-links">
-            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=5.871&amp;t=1.6&amp;h=3.91339&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L1 outside microstrip - w 0.1491 mm</a></li>
-            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=5.236&amp;t=0.598425&amp;h=49.8031&amp;h2=3.91339&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L2 stripline - w 0.1330 mm</a></li>
-          </ul>
+          <div class="about-stackup-previews">
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=5.871&amp;t=1.6&amp;h=3.91339&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-3313 L1 outside microstrip example">
+              <svg viewBox="0 0 450 340" role="img" aria-label="JLC04161H-3313 L1 outside microstrip geometry">
+                <image href="./jlc-3313-l1-l2.svg" width="900" height="340" />
+              </svg>
+            </a>
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=5.236&amp;t=0.598425&amp;h=49.8031&amp;h2=3.91339&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-3313 L2 stripline example">
+              <svg viewBox="450 0 450 340" role="img" aria-label="JLC04161H-3313 L2 stripline geometry">
+                <image href="./jlc-3313-l1-l2.svg" width="900" height="340" />
+              </svg>
+            </a>
+          </div>
         </article>
 
         <article class="about-example">
           <h3>JLC04161H-7628</h3>
           <p>1.59 mm finished thickness, +/- 10%. Uses 0.2104 mm 7628 RC49 prepreg above and below a 1.065 mm core.</p>
-          <img src="./jlc-7628-l1-l2.svg" alt="JLC04161H-7628 cross-sections showing an outside L1 microstrip and an L2 stripline between its reference planes" width="900" height="340" />
-          <ul class="about-example-links">
-            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=13.86&amp;t=1.6&amp;h=8.28346&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L1 outside microstrip - w 0.3520 mm</a></li>
-            <li><a href="https://tnt-mmtl-web.markomo.me/#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=11.01&amp;t=0.598425&amp;h=41.9291&amp;h2=8.28346&amp;etch_delta=0.7&amp;units=mm" target="_blank" rel="noopener noreferrer">Open L2 stripline - w 0.2797 mm</a></li>
-          </ul>
+          <div class="about-stackup-previews">
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=13.86&amp;t=1.6&amp;h=8.28346&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-7628 L1 outside microstrip example">
+              <svg viewBox="0 0 450 340" role="img" aria-label="JLC04161H-7628 L1 outside microstrip geometry">
+                <image href="./jlc-7628-l1-l2.svg" width="900" height="340" />
+              </svg>
+            </a>
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=11.01&amp;t=0.598425&amp;h=41.9291&amp;h2=8.28346&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-7628 L2 stripline example">
+              <svg viewBox="450 0 450 340" role="img" aria-label="JLC04161H-7628 L2 stripline geometry">
+                <image href="./jlc-7628-l1-l2.svg" width="900" height="340" />
+              </svg>
+            </a>
+          </div>
         </article>
 
       </section>

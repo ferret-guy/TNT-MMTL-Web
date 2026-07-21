@@ -35,8 +35,8 @@ function xtalkTable(
   const rows = list
     .map(
       (x) =>
-        `<tr><td>${esc(displayName(x.active))} → ${esc(displayName(x.passive))}</td><td>${eng(x.value)}</td><td>${
-          x.dB == null ? '−∞' : x.dB.toFixed(1)
+        `<tr><td>${esc(displayName(x.active))} to ${esc(displayName(x.passive))}</td><td>${eng(x.value)}</td><td>${
+          x.dB == null ? '-infinity' : x.dB.toFixed(1)
         } dB</td></tr>`,
     )
     .join('');
@@ -68,7 +68,10 @@ export function renderResults(
     return;
   }
   const r = out.result;
-  const diff = r.nSignals === 2 && r.zOdd != null && r.zEven != null;
+  const floatingDifferential =
+    r.nSignals === 1 && r.floatingDifferential != null;
+  const differentialPair = r.nSignals === 2 && r.zOdd != null;
+  const hasCommonMode = differentialPair && r.zEven != null;
   const resultNames = showAdvancedNames ? r.names : r.names.map((_, i) => `Line ${i + 1}`);
   const displayName = (name: string) => {
     const i = r.names.indexOf(name);
@@ -83,32 +86,50 @@ export function renderResults(
       ${sub ? `<div class="small text-body-secondary">${sub}</div>` : ''}
     </div></div></div>`);
 
-  if (diff) {
+  if (floatingDifferential) {
+    card('Differential Z', `${r.z0[0].toFixed(2)} Ω`);
+  } else if (differentialPair) {
     card('Differential Z', `${(2 * r.zOdd!).toFixed(2)} Ω`, 'Z<sub>diff</sub> = 2·Z<sub>odd</sub>');
-    card('Odd / Even', `${r.zOdd!.toFixed(2)} / ${r.zEven!.toFixed(2)} Ω`);
-    card('Common-mode Z', `${(r.zEven! / 2).toFixed(2)} Ω`, 'Z<sub>comm</sub> = Z<sub>even</sub>/2');
+    if (hasCommonMode) {
+      card('Odd / Even', `${r.zOdd!.toFixed(2)} / ${r.zEven!.toFixed(2)} Ω`);
+      card('Common-mode Z', `${(r.zEven! / 2).toFixed(2)} Ω`, 'Z<sub>comm</sub> = Z<sub>even</sub>/2');
+    } else {
+      card('Odd-mode Z', `${r.zOdd!.toFixed(2)} Ω`);
+    }
   }
-  r.z0.forEach((z, i) =>
-    card(
-      diff ? `Z₀ line ${i + 1} (isolated)` : 'Impedance',
-      `${z.toFixed(2)} Ω`,
-      showAdvancedNames ? esc(r.names[i] ?? '') : '',
-    ),
-  );
+  if (!floatingDifferential) {
+    r.z0.forEach((z, i) =>
+      card(
+        hasCommonMode
+          ? `Z₀ line ${i + 1} (isolated)`
+          : differentialPair
+            ? `Z₀ line ${i + 1} (odd mode)`
+            : 'Impedance',
+        `${z.toFixed(2)} Ω`,
+        showAdvancedNames ? esc(r.names[i] ?? '') : '',
+      ),
+    );
+  }
   if (r.epsEff.length) card('Effective εr', r.epsEff.map((e) => e.toFixed(3)).join(' / '));
   if (r.velocity.length)
     card(
       'Propagation velocity',
       r.velocity.map((v) => eng(v)).join(' / ') + ' m/s',
-      diff && r.velocityOdd != null
-        ? `odd ${eng(r.velocityOdd)} / even ${eng(r.velocityEven!)} m/s`
+      differentialPair && r.velocityOdd != null
+        ? hasCommonMode
+          ? `odd ${eng(r.velocityOdd)} / even ${eng(r.velocityEven!)} m/s`
+          : `odd ${eng(r.velocityOdd)} m/s`
         : '',
     );
   if (r.delay.length)
     card(
       'Propagation delay per unit length',
       r.delay.map((d) => `${(d * 1e10).toFixed(2)}`).join(' / ') + ' ps/cm',
-      diff && r.delayOdd != null ? `odd ${(r.delayOdd * 1e10).toFixed(2)} / even ${(r.delayEven! * 1e10).toFixed(2)} ps/cm` : '',
+      differentialPair && r.delayOdd != null
+        ? hasCommonMode
+          ? `odd ${(r.delayOdd * 1e10).toFixed(2)} / even ${(r.delayEven! * 1e10).toFixed(2)} ps/cm`
+          : `odd ${(r.delayOdd * 1e10).toFixed(2)} ps/cm`
+        : '',
     );
 
   // The solver always prints "lossTangent and frequency are not used". Hide

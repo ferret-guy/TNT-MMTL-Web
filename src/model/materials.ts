@@ -1,7 +1,8 @@
 /**
- * Material presets, transcribed from TNT's gui/*.list files
- * (vendor/materials/). Conductivity in S/m; laminates pair permittivity
- * with loss tangent from the two matching lists.
+ * Material presets based on TNT's gui/*.list files (vendor/materials/).
+ * Conductivity is in S/m. Three obvious order-of-magnitude errors in the
+ * legacy lead, nichrome, and tin entries are corrected to room-temperature
+ * reference values.
  */
 
 export interface ConductorMaterial {
@@ -9,15 +10,21 @@ export interface ConductorMaterial {
   sigma: number; // S/m
 }
 
+export const COPPER_CONDUCTIVITY_S_PER_M = 5.0e7;
+
+// Corrected pure-metal values:
+// https://www.metallurgy.nist.gov/solder/NIST_LeadfreeSolder_v4.pdf
+// Nichrome reference data:
+// https://nvlpubs.nist.gov/nistpubs/Legacy/circ/nbscircular100e2.pdf
 export const CONDUCTORS: ConductorMaterial[] = [
-  { name: 'copper', sigma: 5.0e7 },
+  { name: 'copper', sigma: COPPER_CONDUCTIVITY_S_PER_M },
   { name: 'silver', sigma: 6.0e7 },
   { name: 'gold', sigma: 4.0e7 },
   { name: 'aluminum', sigma: 3.0e7 },
   { name: 'brass', sigma: 1.0e7 },
-  { name: 'lead', sigma: 5.0e7 },
-  { name: 'nichrome', sigma: 10.0e7 },
-  { name: 'tin', sigma: 9.0e7 },
+  { name: 'lead', sigma: 5.18e6 },
+  { name: 'nichrome', sigma: 0.91e6 },
+  { name: 'tin', sigma: 9.90e6 },
   { name: 'tungsten', sigma: 1.0e7 },
 ];
 
@@ -82,7 +89,7 @@ export const JLCPCB_LAMINATES: Laminate[] = [
       { fHz: 5e9, er: 4.258, tanD: 0.016 },
       { fHz: 10e9, er: 4.208, tanD: 0.017 },
     ],
-    note: 'Interpolated from vendor data',
+    note: 'Vendor anchors through 1 GHz; higher-frequency FR-4 estimates',
   },
   {
     id: 'jlc-s1000-2m',

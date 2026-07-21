@@ -70,6 +70,10 @@ export interface PresetParams {
   w: number;
   /** trace thickness */
   t: number;
+  /** Tie reference-plane copper thickness to the signal copper thickness. */
+  referencePlaneSameWeight: boolean;
+  /** Independent reference-plane copper thickness when not tied, in mils. */
+  referencePlaneThickness: number;
   /** total bottom-to-top trace-width reduction, in the selected length units */
   etch: number;
   /** dielectric height below the trace layer */
@@ -109,6 +113,8 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     units: 'mils',
     w: 10,
     t: 1.4, // 1 oz copper
+    referencePlaneSameWeight: true,
+    referencePlaneThickness: 1.4,
     etch: 0.5, // JLC outer-layer default: W1 - W2 = 0.5 mil total
     h: 6,
     striplineSeparateMaterials: false,
@@ -146,6 +152,11 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     p.s = kind === 'stripline' ? 8 : 7;
   }
   return p;
+}
+
+/** Effective reference-plane copper thickness in the preset's length units. */
+export function referencePlaneThicknessOf(p: PresetParams): number {
+  return p.referencePlaneSameWeight ? p.t : p.referencePlaneThickness;
 }
 
 /** Realizable total etch reduction, limited so the top keeps >= 20% of w. */
@@ -306,6 +317,7 @@ export function buildPreset(
         topWidth: topRight - topLeft,
         height: topY - base,
         permittivity: er,
+        lossTangent: tanD,
         xOffset: Math.min(bottomLeft, topLeft),
         yOffset: 0,
       };
@@ -324,7 +336,12 @@ export function buildPreset(
   if (kind === 'microstrip') {
     const margin = marginFor(p, kind, variant);
     items.push(
-      { kind: 'GroundPlane', id: 'gnd' },
+      {
+        kind: 'GroundPlane',
+        id: 'gnd',
+        conductivity: p.sigma,
+        thickness: referencePlaneThicknessOf(p),
+      },
       { kind: 'DielectricLayer', id: 'sub', thickness: p.h, permittivity: p.er, lossTangent: p.tanD },
       trace(p, 'trace', n, margin),
       ...coverItems(traceSurfaces(margin)),
@@ -334,7 +351,12 @@ export function buildPreset(
     const upperEr = p.striplineSeparateMaterials ? p.er2 : p.er;
     const upperTanD = p.striplineSeparateMaterials ? p.tanD2 : p.tanD;
     items.push(
-      { kind: 'GroundPlane', id: 'gnd1', },
+      {
+        kind: 'GroundPlane',
+        id: 'gnd1',
+        conductivity: p.sigma,
+        thickness: referencePlaneThicknessOf(p),
+      },
       { kind: 'DielectricLayer', id: 'sub1', thickness: p.h, permittivity: p.er, lossTangent: p.tanD },
       trace(p, 'trace', n, margin),
       {
@@ -344,7 +366,12 @@ export function buildPreset(
         permittivity: upperEr,
         lossTangent: upperTanD,
       },
-      { kind: 'GroundPlane', id: 'gnd2' },
+      {
+        kind: 'GroundPlane',
+        id: 'gnd2',
+        conductivity: p.sigma,
+        thickness: referencePlaneThicknessOf(p),
+      },
     );
   } else {
     // cpw
@@ -356,7 +383,12 @@ export function buildPreset(
     if (!p.cpwBottomGround) {
       // plain CPW: push the required bottom plane far away with a thick air gap
       items.push(
-        { kind: 'GroundPlane', id: 'gnd' },
+        {
+          kind: 'GroundPlane',
+          id: 'gnd',
+          conductivity: p.sigma,
+          thickness: referencePlaneThicknessOf(p),
+        },
         {
           kind: 'DielectricLayer',
           id: 'air',
@@ -366,7 +398,12 @@ export function buildPreset(
         },
       );
     } else {
-      items.push({ kind: 'GroundPlane', id: 'gnd' });
+      items.push({
+        kind: 'GroundPlane',
+        id: 'gnd',
+        conductivity: p.sigma,
+        thickness: referencePlaneThicknessOf(p),
+      });
     }
     items.push(
       { kind: 'DielectricLayer', id: 'sub', thickness: p.h, permittivity: p.er, lossTangent: p.tanD },

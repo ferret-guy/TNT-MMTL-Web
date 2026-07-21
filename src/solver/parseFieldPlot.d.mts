@@ -12,5 +12,9 @@ export interface FieldElement {
 export interface FieldSolution {
   line: string;
   elements: FieldElement[];
+  /** Image-plane y coordinate; defaults to the legacy y = 0 plane. */
+  imagePlaneYM?: number;
+  /** Potential calibration strategy requested by transformed field data. */
+  calibrationMode?: string;
 }
 export declare function parseFieldPlot(text: string): FieldSolution[];

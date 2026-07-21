@@ -11,14 +11,32 @@
  */
 import { parseResult } from './parseResult.mjs';
 import { parseFieldPlot } from './parseFieldPlot.mjs';
-import { computeGrid, type MaskPoly, type MaskRect } from '../field/potential.ts';
+import {
+  computeGrid,
+  type FieldPotentialOptions,
+  type MaskPoly,
+  type MaskRect,
+} from '../field/potential.ts';
 import { runGoalSeek, type GoalSeekSpec } from '../analysis/goalSeek.ts';
+import {
+  SolveProgressTracker,
+  type SolveProgress,
+} from './solveProgress.ts';
 
 // Emscripten module factory: lives in public/, served at <base>/wasm/. The
 // worker script itself is bundled under <base>/assets/, so relative
 // resolution here would land in the wrong directory -- the main thread
 // (which knows the real document base) sends the URL in an init message.
 let bemUrl = new URL('/wasm/bem.mjs', self.location.href).href; // dev fallback
+
+function versionedWasmUrl(): string {
+  const moduleUrl = new URL(bemUrl);
+  const wasmUrl = new URL('bem.wasm', moduleUrl);
+  // new URL('bem.wasm', moduleUrl) intentionally replaces the filename and
+  // would otherwise drop the revision query carried by bem.mjs.
+  wasmUrl.search = moduleUrl.search;
+  return wasmUrl.href;
+}
 
 interface BemModule {
   FS: {
@@ -46,15 +64,28 @@ export interface SolveRequest {
   dseg: number;
 }
 
-async function solveOnce(req: SolveRequest) {
+async function solveOnce(
+  req: SolveRequest,
+  onProgress?: (progress: SolveProgress) => void,
+) {
   const t0 = performance.now();
   const stdout: string[] = [];
+  const progressTracker = new SolveProgressTracker();
+  onProgress?.({ fraction: 0.01, phase: 'initializing' });
   const create = await getFactory();
   const mod = await create({
-    print: (s: string) => stdout.push(s),
-    printErr: (s: string) => stdout.push(s),
+    print: (s: string) => {
+      stdout.push(s);
+      const progress = progressTracker.feed(s);
+      if (progress) onProgress?.(progress);
+    },
+    printErr: (s: string) => {
+      stdout.push(s);
+      const progress = progressTracker.feed(s);
+      if (progress) onProgress?.(progress);
+    },
     locateFile: (f: string, prefix: string) =>
-      f.endsWith('.wasm') ? new URL('bem.wasm', bemUrl).href : prefix + f,
+      f.endsWith('.wasm') ? versionedWasmUrl() : prefix + f,
   });
   mod.FS.mkdir('/work');
   mod.FS.writeFile('/work/case.xsctn', req.xsctn);
@@ -112,7 +143,14 @@ self.onmessage = async (ev: MessageEvent) => {
       return;
     }
     if (msg.cmd === 'solve') {
-      const out = await solveOnce(msg);
+      const out = await solveOnce(msg, (progress) =>
+        (self as unknown as Worker).postMessage({
+          id: msg.id,
+          evt: 'progress',
+          frac: progress.fraction,
+          phase: progress.phase,
+        }),
+      );
       (self as unknown as Worker).postMessage({ id: msg.id, ...out });
     } else if (msg.cmd === 'goalSeek') {
       const spec = msg.spec as GoalSeekSpec;
@@ -132,6 +170,11 @@ self.onmessage = async (ev: MessageEvent) => {
         (msg.masks ?? []) as MaskRect[],
         (msg.maskPolys ?? []) as MaskPoly[],
         (frac) => (self as unknown as Worker).postMessage({ id: msg.id, evt: 'progress', frac }),
+        {
+          imagePlaneYM: msg.imagePlaneYM,
+          calibrationMode: msg.calibrationMode,
+          contourPotentials: msg.contourPotentials,
+        } as FieldPotentialOptions,
       );
       (self as unknown as Worker).postMessage(
         { id: msg.id, ...grid, lines: solutions.map((s) => s.line) },

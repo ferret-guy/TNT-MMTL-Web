@@ -48,13 +48,15 @@
           <div class="card mb-3">
             <div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
               <span>Cross-section</span>
-              <div class="btn-group btn-group-sm ms-2" role="group" aria-label="view mode">
+              <div class="d-flex flex-wrap gap-1 ms-2" role="group" aria-label="view mode">
                 <input type="radio" class="btn-check" name="cs-view" id="cs-view-geom" checked>
-                <label class="btn btn-outline-secondary" for="cs-view-geom">Geometry</label>
+                <label class="btn btn-sm btn-outline-secondary" for="cs-view-geom">Geometry</label>
                 <input type="radio" class="btn-check" name="cs-view" id="cs-view-field">
-                <label class="btn btn-outline-secondary" for="cs-view-field">Potential field</label>
+                <label class="btn btn-sm btn-outline-secondary" for="cs-view-field">Potential field</label>
                 <input type="radio" class="btn-check" name="cs-view" id="cs-view-lines">
-                <label class="btn btn-outline-secondary" for="cs-view-lines">Field lines</label>
+                <label class="btn btn-sm btn-outline-secondary" for="cs-view-lines">Field lines</label>
+                <input type="radio" class="btn-check" name="cs-view" id="cs-view-current">
+                <label class="btn btn-sm btn-outline-secondary" for="cs-view-current">Return Current Density</label>
               </div>
               <select class="form-select form-select-sm w-auto d-none" id="cs-driven" title="driven line"></select>
               <span class="small text-body-secondary d-none" id="cs-driven-label"></span>
@@ -65,10 +67,13 @@
                 <canvas id="cs-field-canvas" class="position-absolute d-none" style="image-rendering:auto"></canvas>
                 <svg id="cross-section" width="100%" class="position-relative" role="img" aria-label="stackup cross-section"></svg>
                 <div class="position-absolute top-50 start-50 translate-middle w-50 d-none" id="cs-progress">
-                  <div class="progress" role="progressbar" style="height: 10px">
+                  <div class="progress" id="cs-progress-track" role="progressbar" aria-labelledby="cs-progress-label" aria-valuemin="0" aria-valuemax="100" style="height: 10px">
                     <div class="progress-bar progress-bar-striped progress-bar-animated" id="cs-progress-bar" style="width: 0%"></div>
                   </div>
-                  <div class="text-center small text-body-secondary mt-1">computing field…</div>
+                  <div class="d-flex align-items-center justify-content-center gap-2 text-center small text-body-secondary mt-1" aria-live="polite">
+                    <span class="spinner-border spinner-border-sm d-none" id="cs-progress-spinner" aria-hidden="true"></span>
+                    <span id="cs-progress-label">Computing potential field...</span>
+                  </div>
                 </div>
               </div>
               <div class="d-none align-items-center gap-2 mt-1 small text-body-secondary" id="cs-field-legend">
@@ -121,21 +126,160 @@
                 <div>
                   <label class="form-label mb-0 small">Roughness Model</label>
                   <select class="form-select form-select-sm" id="loss-model" style="max-width:11rem">
-                    <option value="none">none (smooth)</option>
-                    <option value="hammerstad" selected>Hammerstad–Jensen</option>
-                    <option value="huray">Huray (cannonball)</option>
+                    <option value="none" selected>none (smooth)</option>
+                    <option value="hammerstad">Hammerstad–Jensen</option>
+                    <option value="huray">Huray</option>
                   </select>
                 </div>
-                <div>
-                  <label class="form-label mb-0 small">Roughness Rq</label>
+                <div id="loss-hammerstad-fields">
+                  <label class="form-label mb-0 small" for="loss-rq">RMS roughness Δ</label>
                   <div class="input-group input-group-sm">
                     <input type="number" step="0.1" class="form-control" id="loss-rq" value="1.0" style="max-width:5rem">
-                    <span class="input-group-text">µm RMS</span>
+                    <span class="input-group-text">µm</span>
                   </div>
+                </div>
+                <div class="d-none" id="loss-huray-radius-field">
+                  <label class="form-label mb-0 small" for="loss-huray-radius">Nodule radius a</label>
+                  <div class="input-group input-group-sm">
+                    <input type="number" step="0.05" min="0" class="form-control" id="loss-huray-radius" value="0.5" style="max-width:5rem">
+                    <span class="input-group-text">µm</span>
+                  </div>
+                </div>
+                <div class="d-none" id="loss-huray-ratio-field">
+                  <label class="form-label mb-0 small" for="loss-huray-ratio">Surface ratio SR</label>
+                  <div class="input-group input-group-sm">
+                    <input type="number" step="0.1" min="0" class="form-control" id="loss-huray-ratio" value="2.2" style="max-width:5rem">
+                  </div>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox"
+                         id="loss-reference-plane" checked>
+                  <label class="form-check-label small" for="loss-reference-plane">
+                    Reference plane loss
+                  </label>
                 </div>
                 <span class="small text-body-secondary" id="loss-note"></span>
               </div>
               <div class="row row-cols-2 row-cols-xl-4 g-2 mb-2" id="line-stats"></div>
+              <details class="export-preview my-0 px-2 py-1 rounded border" id="export-model-panel">
+                <summary class="fw-semibold py-1">Export Model</summary>
+                <div class="export-model-body">
+                  <div class="export-model-row" id="export-touchstone-single">
+                    <div class="export-model-title">Touchstone</div>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      <button class="btn btn-sm btn-outline-primary" type="button"
+                              id="btn-export-s2p" aria-describedby="export-status" disabled>
+                        Download .s2p
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button"
+                              id="btn-preview-s2p" aria-describedby="export-status"
+                              aria-label="Preview and copy Touchstone .s2p" disabled>
+                        Preview / copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="export-model-row d-none" id="export-touchstone-differential">
+                    <div class="export-model-title">Touchstone</div>
+                    <span class="export-model-note">
+                      .s4p order: 1 IN+, 2 OUT+, 3 IN-, 4 OUT-. SDD is mixed-mode differential.
+                    </span>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      <button class="btn btn-sm btn-outline-primary" type="button"
+                              id="btn-export-s4p" aria-describedby="export-status" disabled>
+                        Download .s4p
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button"
+                              id="btn-preview-s4p" aria-describedby="export-status"
+                              aria-label="Preview and copy Touchstone .s4p" disabled>
+                        Preview / copy
+                      </button>
+                      <button class="btn btn-sm btn-outline-primary" type="button"
+                              id="btn-export-sdd2p" aria-describedby="export-status" disabled>
+                        Download SDD .s2p
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button"
+                              id="btn-preview-sdd2p" aria-describedby="export-status"
+                              aria-label="Preview and copy mixed-mode SDD .s2p" disabled>
+                        Preview / copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="export-model-row d-none" id="export-touchstone-arbitrary">
+                    <div class="export-model-title">Touchstone</div>
+                    <span class="export-model-note" id="export-touchstone-arbitrary-note">
+                      Two ports per conductor, using the internal solver names and order.
+                    </span>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      <button class="btn btn-sm btn-outline-primary" type="button"
+                              id="btn-export-snp" aria-describedby="export-status" disabled>
+                        Download .s2p
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button"
+                              id="btn-preview-snp" aria-describedby="export-status"
+                              aria-label="Preview and copy Touchstone .s2p" disabled>
+                        Preview / copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="export-model-row">
+                    <div class="export-model-title">HSPICE W-element</div>
+                    <span class="export-model-note">
+                      Analytical lower-triangular RLGC data for <code>RLGCfile=</code>.
+                    </span>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      <button class="btn btn-sm btn-outline-primary" type="button"
+                              id="btn-export-welement" aria-describedby="export-status" disabled>
+                        Download .wlc
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button"
+                              id="btn-copy-welement" aria-describedby="export-status" disabled>
+                        Preview / copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="export-model-row">
+                    <div class="export-model-title">Generic SPICE</div>
+                    <span class="export-model-note" id="export-ladder-recommendation"></span>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      <label class="small" for="export-ladder-sections">Sections</label>
+                      <input class="form-control form-control-sm" type="number" min="1"
+                             step="1" value="1" id="export-ladder-sections">
+                      <button class="btn btn-sm btn-outline-primary" type="button"
+                              id="btn-export-subckt" aria-describedby="export-status" disabled>
+                        Download .cir
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button"
+                              id="btn-copy-subckt" aria-describedby="export-status" disabled>
+                        Preview / copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="export-model-meta text-body-secondary" id="export-derived">
+                    Solve a stackup to show signal count and conductor order.
+                  </div>
+                  <div class="export-model-meta text-body-secondary" id="export-status" aria-live="polite">
+                    Solve a valid stackup to enable model export.
+                  </div>
+
+                  <div class="d-none mt-2" id="export-preview-wrap">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                      <label class="form-label fw-semibold small mb-0" for="export-text-preview"
+                             id="export-preview-label">Model preview</label>
+                      <button class="btn btn-sm btn-outline-secondary ms-auto" type="button"
+                              id="btn-copy-preview">
+                        Copy
+                      </button>
+                    </div>
+                    <textarea class="form-control font-monospace small" id="export-text-preview"
+                              rows="12" readonly spellcheck="false"></textarea>
+                  </div>
+                </div>
+              </details>
               <div id="loss-plot" style="min-height:340px"></div>
             </section>
 

@@ -12,6 +12,10 @@ export type LengthUnits = 'mils' | 'microns' | 'inches' | 'meters';
 export interface GroundPlaneItem {
   kind: 'GroundPlane';
   id: string;
+  /** Bulk conductivity in S/m. Optional for backward compatibility. */
+  conductivity?: number;
+  /** Copper thickness in the stackup's length units. Optional for legacy files. */
+  thickness?: number;
 }
 
 export interface DielectricLayerItem {
@@ -28,6 +32,8 @@ export interface RectangleDielectricItem {
   width: number;
   height: number;
   permittivity: number;
+  /** Dielectric dissipation factor used by the JS loss engine. */
+  lossTangent: number;
   xOffset: number;
   yOffset: number;
 }
@@ -45,6 +51,26 @@ export interface TrapezoidDielectricItem {
   bottomWidth: number;
   height: number;
   permittivity: number;
+  /** Dielectric dissipation factor used by the JS loss engine. */
+  lossTangent: number;
+  xOffset: number;
+  yOffset: number;
+}
+
+/**
+ * One or more circular dielectric bodies, such as wire insulation.  Offsets
+ * locate the lower-left corner of the first circle's bounding square; members
+ * repeat horizontally by `pitch`, matching CircleConductors placement.
+ */
+export interface CircleDielectricItem {
+  kind: 'CircleDielectric';
+  id: string;
+  diameter: number;
+  permittivity: number;
+  /** Dielectric dissipation factor used by the JS loss engine. */
+  lossTangent: number;
+  number: number;
+  pitch: number;
   xOffset: number;
   yOffset: number;
 }
@@ -88,6 +114,7 @@ export type StackupItem =
   | DielectricLayerItem
   | RectangleDielectricItem
   | TrapezoidDielectricItem
+  | CircleDielectricItem
   | ConductorItem;
 
 export interface Stackup {
@@ -118,6 +145,15 @@ export function signalCount(s: Stackup): number {
 export interface SolveResult {
   nSignals: number;
   names: string[];
+  /**
+   * Present when an unreferenced physical conductor pair has been reduced to
+   * its one realizable differential loop. Names are the original two solver
+   * conductor names in positive/return order.
+   */
+  floatingDifferential?: {
+    positiveName: string;
+    negativeName: string;
+  };
   /** electrostatic induction matrix [F/m], row-major nSignals x nSignals */
   B: number[][];
   /** inductance matrix [H/m] */
@@ -166,10 +202,14 @@ export interface SolveOutput {
 export type RoughnessModel = 'none' | 'hammerstad' | 'huray';
 
 export interface LossParams {
+  /** Include reference and return conductor loss in post-processing. */
+  includeReferencePlaneLoss: boolean;
   roughnessModel: RoughnessModel;
-  /** RMS roughness Rq in micrometers */
+  /** Hammerstad-Jensen RMS roughness depth in micrometers. */
   roughnessRqUm: number;
-  /** Huray: surface ratio (typ. area covered by snowballs), default 14 spheres model */
+  /** Huray effective spherical-nodule radius in micrometers. */
+  hurayRadiusUm: number;
+  /** Huray total nodule-surface area divided by the flat reference area. */
   hurayRatio: number;
   fMinHz: number;
   fMaxHz: number;

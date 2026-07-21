@@ -30,11 +30,24 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: tests/integration/requirements.txt
+
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          python -m pip install -r tests/integration/requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ngspice
 
       - name: Test
-        run: npm test
+        run: |
+          npm test
+          npm run test:interop
 
       - name: Build
         run: npm run build

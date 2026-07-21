@@ -13,12 +13,97 @@ globalThis.localStorage = {
   setItem: () => {},
 };
 
-const { buildPreset, defaultParams, etchReductionOf, topWidthOf } = await import('../../src/model/presets.ts');
+const {
+  buildPreset,
+  defaultParams,
+  etchReductionOf,
+  referencePlaneThicknessOf,
+  topWidthOf,
+} = await import('../../src/model/presets.ts');
 const { decodeHash, decodeSavedState, defaultState, encodeConfig } = await import('../../src/model/store.ts');
 const { etchFactorIcon } = await import('../../src/ui/presetForm.ts');
+const { generateXsctn } = await import('../../src/xsctn/generate.ts');
 
 test('the store reads only the current local-storage namespace', () => {
   assert.deepEqual(storageReads, ['tnt-web-state-v3']);
+});
+
+test('reference-plane loss and linked foil weight default on', () => {
+  const state = defaultState();
+  assert.equal(state.lossParams.includeReferencePlaneLoss, true);
+  for (const kind of ['microstrip', 'stripline', 'cpw']) {
+    for (const variant of ['se', 'diff']) {
+      const params = defaultParams(kind, variant);
+      assert.equal(params.referencePlaneSameWeight, true);
+      assert.equal(referencePlaneThicknessOf(params), params.t);
+    }
+  }
+  const encoded = encodeConfig(state);
+  assert.doesNotMatch(encoded, /(?:^|&)ref_loss=/);
+  assert.doesNotMatch(encoded, /(?:^|&)ref_same_wt=/);
+  assert.doesNotMatch(encoded, /(?:^|&)ref_t=/);
+});
+
+test('reference-plane controls round-trip in readable links', () => {
+  const state = defaultState();
+  state.lossParams = {
+    ...state.lossParams,
+    includeReferencePlaneLoss: false,
+  };
+  state.presetParams = {
+    ...state.presetParams,
+    referencePlaneSameWeight: false,
+    referencePlaneThickness: 2.8,
+  };
+  const encoded = encodeConfig(state);
+  assert.match(encoded, /(?:^|&)ref_loss=0(?:&|$)/);
+  assert.match(encoded, /(?:^|&)ref_same_wt=0(?:&|$)/);
+  assert.match(encoded, /(?:^|&)ref_t=2\.8(?:&|$)/);
+  const decoded = decodeHash(`#${encoded}`);
+  assert.equal(decoded?.lossParams?.includeReferencePlaneLoss, false);
+  assert.equal(decoded?.presetParams?.referencePlaneSameWeight, false);
+  assert.equal(decoded?.presetParams?.referencePlaneThickness, 2.8);
+  assert.equal(referencePlaneThicknessOf(decoded.presetParams), 2.8);
+});
+
+test('legacy v3 state gains linked, enabled reference-plane defaults', () => {
+  const legacy = {
+    v: 3,
+    mode: 'preset',
+    presetKind: 'microstrip',
+    presetVariant: 'se',
+    presetParams: {
+      ...defaultParams('microstrip', 'se'),
+      t: 2.8,
+    },
+    lossParams: {
+      roughnessModel: 'none',
+      roughnessRqUm: 1,
+      hurayRadiusUm: 0.5,
+      hurayRatio: 2.2,
+      fMinHz: 1e6,
+      fMaxHz: 1e10,
+      nPoints: 160,
+    },
+  };
+  delete legacy.presetParams.referencePlaneSameWeight;
+  delete legacy.presetParams.referencePlaneThickness;
+  const decoded = decodeSavedState(JSON.stringify(legacy));
+  assert.equal(decoded?.lossParams.includeReferencePlaneLoss, true);
+  assert.equal(decoded?.presetParams.referencePlaneSameWeight, true);
+  assert.equal(decoded?.presetParams.referencePlaneThickness, 2.8);
+  assert.equal(referencePlaneThicknessOf(decoded.presetParams), 2.8);
+});
+
+test('reference foil metadata does not alter the electrostatic XSCTN geometry', () => {
+  const params = defaultParams('microstrip', 'diff');
+  const linked = buildPreset('microstrip', 'diff', params);
+  const separate = buildPreset('microstrip', 'diff', {
+    ...params,
+    referencePlaneSameWeight: false,
+    referencePlaneThickness: 4.2,
+  });
+  assert.equal(generateXsctn(linked), generateXsctn(separate));
 });
 
 test('JLC total-width reduction is the preset default and is thickness-independent', () => {
@@ -87,6 +172,15 @@ test('obsolete, unversioned, and unknown readable links are rejected', () => {
   const token = btoa(JSON.stringify({ v: 2, mode: 'preset' }))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   assert.equal(decodeHash(`#cfg=${token}`), null);
+});
+
+test('readable links clamp nonphysical roughness inputs', () => {
+  const decoded = decodeHash(
+    '#v=3&kind=microstrip&var=se&rough=huray&rq_um=-2&huray_r_um=-1&huray_sr=-3',
+  );
+  assert.equal(decoded?.lossParams?.roughnessRqUm, 0);
+  assert.equal(decoded?.lossParams?.hurayRadiusUm, 0);
+  assert.equal(decoded?.lossParams?.hurayRatio, 0);
 });
 
 test('current readable links round-trip a dimensional etch delta', () => {

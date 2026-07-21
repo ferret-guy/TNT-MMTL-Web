@@ -21,12 +21,26 @@ const KINDS: Array<{ id: PresetKind; label: string }> = [
 
 /** standard copper weights: oz/ft² -> thickness in mils (1 oz = 1.37 mil) */
 const COPPER_WEIGHTS: Array<{ label: string; mils: number }> = [
-  { label: '¼ oz', mils: 0.35 },
-  { label: '½ oz', mils: 0.7 },
+  { label: '0.25 oz', mils: 0.35 },
+  { label: '0.5 oz', mils: 0.7 },
   { label: '1 oz', mils: 1.4 },
   { label: '2 oz', mils: 2.8 },
   { label: '3 oz', mils: 4.2 },
 ];
+
+const copperWeightIndex = (thicknessMils: number): number =>
+  COPPER_WEIGHTS.findIndex(
+    (weight) =>
+      Math.abs(weight.mils - thicknessMils) / weight.mils < 0.02,
+  );
+
+const copperWeightOptions = (selectedIndex: number): string => `
+  ${COPPER_WEIGHTS.map(
+    (weight, index) =>
+      `<option value="${index}" ${index === selectedIndex ? 'selected' : ''}>${weight.label}</option>`,
+  ).join('')}
+  <option value="custom" ${selectedIndex < 0 ? 'selected' : ''}>Custom</option>
+`;
 
 export interface PresetFormHooks {
   onGoalSeek: (
@@ -34,6 +48,8 @@ export interface PresetFormHooks {
     seekParam: 'w' | 's',
     target: number,
   ) => Promise<{ ok: boolean; x?: number; message: string }>;
+  /** Refresh post-processing that depends only on reference-plane metadata. */
+  onReferenceLossChange?: () => void;
 }
 
 const num = (v: string, fallback: number): number => {
@@ -138,7 +154,8 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   const coverOptions = COVER_MATERIALS.map(
     (c, i) => `<option value="${i}" ${i === coverMatch ? 'selected' : ''}>${c.name} (εr ${c.er})</option>`,
   ).join('');
-  const wIdx = COPPER_WEIGHTS.findIndex((wt) => Math.abs(wt.mils - p.t) / wt.mils < 0.02);
+  const wIdx = copperWeightIndex(p.t);
+  const referenceWeightIdx = copperWeightIndex(p.referencePlaneThickness);
 
   container.innerHTML = `
     <div class="d-flex gap-2 flex-wrap mb-3">
@@ -172,11 +189,11 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
         mils: p.t,
         unit,
         min: 0.01,
-        colClass: 'col-6',
+        colClass: 'col-12 col-sm-6',
         prefixHtml: `${primaryFieldIcon('thickness')}<select class="form-select copper-weight-select" id="pf-copper-weight"
-            title="standard copper weight — picking one sets the thickness; typing a custom thickness back-selects the matching weight">
-            ${COPPER_WEIGHTS.map((wt, i) => `<option value="${i}" ${i === wIdx ? 'selected' : ''}>${wt.label}</option>`).join('')}
-            <option value="custom" ${wIdx < 0 ? 'selected' : ''}>custom…</option>
+            aria-label="Copper weight"
+            title="Standard copper weight - selecting one sets the thickness; typing a custom thickness selects Custom">
+            ${copperWeightOptions(wIdx)}
           </select>`,
       })}
       ${dimFieldHtml({
@@ -226,12 +243,38 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
       `}
     ` : materialRow('', p.laminateId, p.er, p.tanD)}
 
-    ${kind !== 'stripline' ? `
     <div class="mt-2">
-      <div class="form-check form-check-inline">
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        ${kind !== 'stripline' ? `<div class="form-check">
         <input class="form-check-input" type="checkbox" id="pf-cover" ${p.cover ? 'checked' : ''}>
         <label class="form-check-label small" for="pf-cover">Soldermask</label>
+        </div>` : ''}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="pf-reference-plane-same"
+                 ${p.referencePlaneSameWeight ? 'checked' : ''}>
+          <label class="form-check-label small" for="pf-reference-plane-same">
+            Use same weight for reference plane
+          </label>
+        </div>
       </div>
+      ${!p.referencePlaneSameWeight ? `
+      <div class="row g-2 mt-0" id="pf-reference-plane-weight-row">
+        ${dimFieldHtml({
+          id: 'pf-reference-plane-t',
+          label: 'Reference Plane Copper Weight &amp; Thickness',
+          mils: p.referencePlaneThickness,
+          unit,
+          min: 0.01,
+          colClass: 'col-12 col-sm-6',
+          prefixHtml: `<select class="form-select copper-weight-select"
+              id="pf-reference-plane-weight"
+              aria-label="Reference plane copper weight"
+              title="Standard reference-plane copper weight - selecting one sets the thickness">
+              ${copperWeightOptions(referenceWeightIdx)}
+            </select>`,
+        })}
+      </div>` : ''}
+      ${kind !== 'stripline' ? `
       <div class="row g-2 mt-0 ${p.cover ? '' : 'd-none'}" id="pf-cover-row">
         <div class="col-6">
           <label class="form-label mb-0 small">Mask Material</label>
@@ -255,8 +298,8 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
         </div>` : ''}
         ${p.cover ? dim('cover-cu', 'Mask Over Copper', p.cover.tCopper, 'col-6') : ''}
         ${p.cover ? dim('cover-base', 'Base Mask (on laminate)', p.cover.tBase, 'col-6') : ''}
-      </div>
-    </div>` : ''}
+      </div>` : ''}
+    </div>
 
     <div class="accordion accordion-flush mt-3" id="pf-adv">
       <div class="accordion-item">
@@ -358,8 +401,16 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     },
     'pf-s': (v) => upd({ s: v }),
     'pf-t': (v) => {
-      upd({ t: v });
+      const current = store.get().presetParams;
+      upd(current.referencePlaneSameWeight
+        ? { t: v, referencePlaneThickness: v }
+        : { t: v });
       syncCopperWeight(v);
+    },
+    'pf-reference-plane-t': (v) => {
+      upd({ referencePlaneThickness: v });
+      syncReferenceCopperWeight(v);
+      hooks.onReferenceLossChange?.();
     },
     'pf-h': (v) => upd({ h: v }),
     'pf-h2': (v) => upd({ h2: v }),
@@ -387,18 +438,45 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   /* copper weight <-> thickness */
   const weightSel = container.querySelector('#pf-copper-weight') as HTMLSelectElement;
   const syncCopperWeight = (tMils: number) => {
-    const i = COPPER_WEIGHTS.findIndex((wt) => Math.abs(wt.mils - tMils) / wt.mils < 0.02);
+    const i = copperWeightIndex(tMils);
     weightSel.value = i >= 0 ? String(i) : 'custom';
+  };
+  const referenceWeightSel = container.querySelector(
+    '#pf-reference-plane-weight',
+  ) as HTMLSelectElement | null;
+  const syncReferenceCopperWeight = (tMils: number) => {
+    if (!referenceWeightSel) return;
+    const index = copperWeightIndex(tMils);
+    referenceWeightSel.value = index >= 0 ? String(index) : 'custom';
   };
   weightSel.addEventListener('change', () => {
     if (weightSel.value === 'custom') return;
     const wt = COPPER_WEIGHTS[parseInt(weightSel.value, 10)];
-    upd({ t: wt.mils });
+    const current = store.get().presetParams;
+    upd(current.referencePlaneSameWeight
+      ? { t: wt.mils, referencePlaneThickness: wt.mils }
+      : { t: wt.mils });
     const tField = container.querySelector('#pf-t') as HTMLInputElement | null;
     if (tField) {
       tField.dataset.mils = String(wt.mils);
       tField.value = formatDim(wt.mils, tField.dataset.unit as DimUnit);
     }
+  });
+  referenceWeightSel?.addEventListener('change', () => {
+    if (referenceWeightSel.value === 'custom') return;
+    const weight = COPPER_WEIGHTS[parseInt(referenceWeightSel.value, 10)];
+    upd({ referencePlaneThickness: weight.mils });
+    const field = container.querySelector(
+      '#pf-reference-plane-t',
+    ) as HTMLInputElement | null;
+    if (field) {
+      field.dataset.mils = String(weight.mils);
+      field.value = formatDim(
+        weight.mils,
+        field.dataset.unit as DimUnit,
+      );
+    }
+    hooks.onReferenceLossChange?.();
   });
 
   const bindNum = (id: string, apply: (v: number) => void) => {
@@ -507,6 +585,28 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
   (container.querySelector('#pf-conductor') as HTMLSelectElement | null)?.addEventListener('change', (e) => {
     const c = CONDUCTORS.find((c) => c.name === (e.target as HTMLSelectElement).value);
     if (c) upd({ sigma: c.sigma });
+  });
+
+  const sameReferenceWeight = container.querySelector(
+    '#pf-reference-plane-same',
+  ) as HTMLInputElement | null;
+  sameReferenceWeight?.addEventListener('change', () => {
+    const current = store.get().presetParams;
+    const linked = sameReferenceWeight.checked;
+    upd({
+      referencePlaneSameWeight: linked,
+      ...(linked
+        ? { referencePlaneThickness: current.t }
+        : {}),
+    });
+    hooks.onReferenceLossChange?.();
+    (
+      container.querySelector(
+        linked
+          ? '#pf-reference-plane-same'
+          : '#pf-reference-plane-weight',
+      ) as HTMLElement | null
+    )?.focus();
   });
 
   const coverBox = container.querySelector('#pf-cover') as HTMLInputElement | null;

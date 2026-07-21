@@ -24,7 +24,8 @@
 /**
  * @typedef {{type: 'conductor'|'dielectric', x: number[], y: number[],
  *            sigma: number[], edges: Array<{end: 0|1, nu: number}>}} FieldElement
- * @typedef {{line: string, elements: FieldElement[]}} FieldSolution
+ * @typedef {{line: string, elements: FieldElement[], imagePlaneYM?: number,
+ *            calibrationMode?: string}} FieldSolution
  */
 
 /**
@@ -47,6 +48,17 @@ export function parseFieldPlot(text) {
     }
     if (line.startsWith('Active Line:')) {
       if (cur) cur.line = line.slice('Active Line:'.length).trim().replace(/^::/, '');
+      continue;
+    }
+    if (line.startsWith('Image Plane Y:')) {
+      if (cur) {
+        const value = Number(line.slice('Image Plane Y:'.length).trim());
+        if (Number.isFinite(value)) cur.imagePlaneYM = value;
+      }
+      continue;
+    }
+    if (line.startsWith('Calibration Mode:')) {
+      if (cur) cur.calibrationMode = line.slice('Calibration Mode:'.length).trim();
       continue;
     }
     if (line.startsWith('End Solution Output')) {

@@ -4,12 +4,27 @@
  */
 import type { SolveOutput } from '../model/types.ts';
 import type { GoalSeekIter, GoalSeekOutcome, GoalSeekSpec } from '../analysis/goalSeek.ts';
+import type { SolveProgressPhase } from './solveProgress.ts';
 
 interface Pending {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   onIter?: (it: GoalSeekIter) => void;
-  onProgress?: (frac: number) => void;
+  onProgress?: (frac: number, phase?: SolveProgressPhase) => void;
+}
+
+// Public WASM assets keep stable filenames in both Vite development and the
+// static build. Tie their cache key to the native build so an already-open
+// browser cannot keep an older solver after bem.wasm is rebuilt.
+const BEM_ASSET_REVISION = 'ffc02abe';
+
+function versionedBemUrl(): string {
+  const url = new URL(
+    `${import.meta.env.BASE_URL}wasm/bem.mjs`,
+    document.baseURI,
+  );
+  url.searchParams.set('v', BEM_ASSET_REVISION);
+  return url.href;
 }
 
 export class SolverClient {
@@ -28,7 +43,7 @@ export class SolverClient {
     // bundled under <base>/assets/ and cannot resolve <base> on its own)
     w.postMessage({
       cmd: 'init',
-      bemUrl: new URL(`${import.meta.env.BASE_URL}wasm/bem.mjs`, document.baseURI).href,
+      bemUrl: versionedBemUrl(),
     });
     w.onmessage = (ev) => this.dispatch(ev.data);
     w.onerror = (ev) => {
@@ -47,7 +62,11 @@ export class SolverClient {
       return;
     }
     if (msg.evt === 'progress') {
-      p.onProgress?.((msg as unknown as { frac: number }).frac);
+      const progress = msg as unknown as {
+        frac: number;
+        phase?: SolveProgressPhase;
+      };
+      p.onProgress?.(progress.frac, progress.phase);
       return;
     }
     this.pending.delete(msg.id);
@@ -55,11 +74,20 @@ export class SolverClient {
     p.resolve(msg);
   }
 
-  solve(xsctn: string, cseg: number, dseg: number): Promise<SolveOutput> {
+  solve(
+    xsctn: string,
+    cseg: number,
+    dseg: number,
+    onProgress?: (frac: number, phase?: SolveProgressPhase) => void,
+  ): Promise<SolveOutput> {
     const id = this.nextId++;
     this.busy = true;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      this.pending.set(id, {
+        resolve: resolve as (v: unknown) => void,
+        reject,
+        onProgress,
+      });
       this.worker.postMessage({ id, cmd: 'solve', xsctn, cseg, dseg });
     });
   }
@@ -82,6 +110,10 @@ export class SolverClient {
       ny: number;
       masks: Array<{ x0: number; y0: number; x1: number; y1: number }>;
       maskPolys: Array<Array<[number, number]>>;
+      /** Optional override; transformed field text may also carry this metadata. */
+      imagePlaneYM?: number;
+      calibrationMode?: import('../field/potential.ts').FieldCalibrationMode;
+      contourPotentials?: number[];
     },
     onProgress?: (frac: number) => void,
   ): Promise<import('../field/potential.ts').FieldGrid & { lines: string[] }> {

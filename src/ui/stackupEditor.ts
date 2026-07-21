@@ -8,27 +8,49 @@ import type {
 } from '../model/types.ts';
 import { isConductor, signalCount } from '../model/types.ts';
 import { validateStackup } from '../xsctn/generate.ts';
+import { isFloatingPairStackup } from '../analysis/explicitReference.ts';
 import { store } from '../model/store.ts';
 import { bindDimFields, dimFieldHtml, retargetDimFields, type DimUnit } from './dimField.ts';
 
 let uid = 1;
 const newId = () => `it${Date.now().toString(36)}${uid++}`;
+const DEFAULT_GROUND_CONDUCTIVITY = 5e7;
+const DEFAULT_GROUND_THICKNESS = 1.4;
 
 const TEMPLATES: Array<{ label: string; make: () => StackupItem }> = [
-  { label: 'Ground plane', make: () => ({ kind: 'GroundPlane', id: newId() }) },
+  {
+    label: 'Ground plane',
+    make: () => ({
+      kind: 'GroundPlane',
+      id: newId(),
+      conductivity: DEFAULT_GROUND_CONDUCTIVITY,
+      thickness: DEFAULT_GROUND_THICKNESS,
+    }),
+  },
   {
     label: 'Dielectric layer',
     make: () => ({ kind: 'DielectricLayer', id: newId(), thickness: 5, permittivity: 4.27, lossTangent: 0.016 }),
   },
   {
     label: 'Dielectric block',
-    make: () => ({ kind: 'RectangleDielectric', id: newId(), width: 20, height: 3, permittivity: 3.8, xOffset: 0, yOffset: 0 }),
+    make: () => ({
+      kind: 'RectangleDielectric', id: newId(), width: 20, height: 3,
+      permittivity: 3.8, lossTangent: 0.02, xOffset: 0, yOffset: 0,
+    }),
   },
   {
     label: 'Trapezoid dielectric',
     make: () => ({
       kind: 'TrapezoidDielectric', id: newId(), topWidth: 18, bottomWidth: 20,
-      height: 3, permittivity: 3.8, xOffset: 0, yOffset: 0,
+      height: 3, permittivity: 3.8, lossTangent: 0.02, xOffset: 0, yOffset: 0,
+    }),
+  },
+  {
+    label: 'Circular dielectric',
+    make: () => ({
+      kind: 'CircleDielectric', id: newId(), diameter: 20,
+      permittivity: 2.34, lossTangent: 0.00002, number: 1, pitch: 0,
+      xOffset: 0, yOffset: 0,
     }),
   },
   {
@@ -59,6 +81,7 @@ const KIND_LABEL: Record<StackupItem['kind'], string> = {
   DielectricLayer: 'Dielectric layer',
   RectangleDielectric: 'Dielectric block',
   TrapezoidDielectric: 'Trapezoid dielectric',
+  CircleDielectric: 'Circular dielectric',
   RectangleConductors: 'Rect conductors',
   TrapezoidConductors: 'Trap conductors',
   CircleConductors: 'Circle conductors',
@@ -74,7 +97,10 @@ interface FieldSpec {
 function fieldsFor(item: StackupItem): FieldSpec[] {
   switch (item.kind) {
     case 'GroundPlane':
-      return [];
+      return [
+        { key: 'thickness', label: 'Copper Thickness', dim: true },
+        { key: 'conductivity', label: 'Conductivity (S/m)' },
+      ];
     case 'DielectricLayer':
       return [
         { key: 'thickness', label: 'Thickness', dim: true },
@@ -85,6 +111,7 @@ function fieldsFor(item: StackupItem): FieldSpec[] {
       return [
         { key: 'width', label: 'Width', dim: true },
         { key: 'height', label: 'Height', dim: true },
+        { key: 'lossTangent', label: 'Loss Tangent' },
         { key: 'permittivity', label: 'Permittivity εr' },
         { key: 'xOffset', label: 'X Offset', dim: true },
         { key: 'yOffset', label: 'Y Offset', dim: true },
@@ -94,7 +121,18 @@ function fieldsFor(item: StackupItem): FieldSpec[] {
         { key: 'bottomWidth', label: 'Bottom Width', dim: true },
         { key: 'topWidth', label: 'Top Width', dim: true },
         { key: 'height', label: 'Height', dim: true },
+        { key: 'lossTangent', label: 'Loss Tangent' },
         { key: 'permittivity', label: 'Permittivity Îµr' },
+        { key: 'xOffset', label: 'X Offset', dim: true },
+        { key: 'yOffset', label: 'Y Offset', dim: true },
+      ];
+    case 'CircleDielectric':
+      return [
+        { key: 'diameter', label: 'Outer Diameter', dim: true },
+        { key: 'number', label: 'Count' },
+        { key: 'pitch', label: 'Pitch', dim: true },
+        { key: 'lossTangent', label: 'Loss Tangent' },
+        { key: 'permittivity', label: 'Permittivity εr' },
         { key: 'xOffset', label: 'X Offset', dim: true },
         { key: 'yOffset', label: 'Y Offset', dim: true },
       ];
@@ -141,7 +179,14 @@ export function renderStackupEditor(container: HTMLElement) {
   const itemCard = (item: StackupItem, i: number): string => {
     const fields = fieldsFor(item)
       .map((f) => {
-        const value = (item as unknown as Record<string, number>)[f.key];
+        const storedValue = (item as unknown as Record<string, number | undefined>)[f.key];
+        const value = storedValue ?? (
+          item.kind === 'GroundPlane' && f.key === 'thickness'
+            ? DEFAULT_GROUND_THICKNESS
+            : item.kind === 'GroundPlane' && f.key === 'conductivity'
+              ? DEFAULT_GROUND_CONDUCTIVITY
+              : 0
+        );
         if (f.dim) {
           return dimFieldHtml({
             id: `sk-${i}-${f.key}`,
@@ -197,7 +242,11 @@ export function renderStackupEditor(container: HTMLElement) {
         ${(['mils', 'mm', 'um', 'inch'] as DimUnit[]).map((u) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u === 'um' ? 'µm' : u === 'inch' ? 'in' : u}</option>`).join('')}
       </select>
       <span class="badge text-bg-${nSignals === 0 ? 'danger' : 'primary'}">${nSignals} signal conductor${nSignals === 1 ? '' : 's'}</span>
-      ${nSignals === 2 ? '<span class="badge text-bg-success">odd/even &amp; Zdiff available</span>' : ''}
+      ${nSignals === 2
+        ? isFloatingPairStackup(st)
+          ? '<span class="badge text-bg-success">floating differential mode</span>'
+          : '<span class="badge text-bg-success">odd/even &amp; Zdiff available</span>'
+        : ''}
       <span class="tiny text-body-secondary ms-auto">top of board ↑, list order = stackup order</span>
     </div>
     ${errors.length ? `<div class="alert alert-warning py-2 small">${errors.join('<br>')}</div>` : ''}

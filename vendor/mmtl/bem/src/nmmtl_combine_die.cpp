@@ -26,6 +26,84 @@
 
 #include "nmmtl.h"
 
+/* Return the material selected by the same last-object-wins ordering used
+   when conductor arcs are classified.  This also lets a closed shape be
+   assembled from touching trapezoids without leaving zero-contrast internal
+   boundaries in the BEM matrix. */
+static int nmmtl_point_in_dielectric(DIELECTRICS_P dielectric,
+                                     double x, double y)
+{
+  const double scale = fabs(x) + fabs(y) + fabs(dielectric->x0) +
+    fabs(dielectric->x1) + fabs(dielectric->y0) +
+    fabs(dielectric->y1) + 1.0;
+  const double tolerance = 128.0 * DBL_EPSILON * scale;
+  if(y < dielectric->y0 - tolerance || y > dielectric->y1 + tolerance)
+    return(FALSE);
+
+  double left = dielectric->x0;
+  double right = dielectric->x1;
+  if(dielectric->primitive == POLYGON) {
+    const double height = dielectric->y1 - dielectric->y0;
+    const double fraction = fabs(height) <= DBL_MIN ? 0.0 :
+      (y - dielectric->y0) / height;
+    left += fraction * (dielectric->top_x0 - dielectric->x0);
+    right += fraction * (dielectric->top_x1 - dielectric->x1);
+  }
+  return(x >= left - tolerance && x <= right + tolerance);
+}
+
+static float nmmtl_point_epsilon(DIELECTRICS_P dielectrics,
+                                 double x, double y)
+{
+  for(DIELECTRICS_P dielectric = dielectrics; dielectric != NULL;
+      dielectric = dielectric->next)
+    if(nmmtl_point_in_dielectric(dielectric, x, y))
+      return(dielectric->constant);
+  return(AIR_CONSTANT);
+}
+
+static void nmmtl_reclassify_dielectric_segments(
+  DIELECTRICS_P dielectrics, DIELECTRIC_SEGMENTS_P *segments)
+{
+  DIELECTRIC_SEGMENTS_P segment = *segments;
+  DIELECTRIC_SEGMENTS_P previous = NULL;
+  while(segment != NULL) {
+    DIELECTRIC_SEGMENTS_P next = segment->next;
+    double x0, y0, x1, y1;
+    nmmtl_die_seg_endpoints(segment, &x0, &y0, &x1, &y1);
+    const double dx = x1 - x0;
+    const double dy = y1 - y0;
+    const double length = hypot(dx, dy);
+    int keep = length > DBL_MIN;
+
+    if(keep) {
+      /* Every dielectric-segment normal points left of its endpoint order:
+         up for horizontal, left for vertical, and the geometric left normal
+         for a general/sloped segment. */
+      const double nx = -dy / length;
+      const double ny = dx / length;
+      const double delta = fmax(length * 1.0e-7, 1.0e-12);
+      const double mx = 0.5 * (x0 + x1);
+      const double my = 0.5 * (y0 + y1);
+      segment->epsilonplus = nmmtl_point_epsilon(
+        dielectrics, mx + delta * nx, my + delta * ny);
+      segment->epsilonminus = nmmtl_point_epsilon(
+        dielectrics, mx - delta * nx, my - delta * ny);
+      keep = segment->epsilonplus != segment->epsilonminus;
+    }
+
+    if(!keep) {
+      if(previous == NULL) *segments = next;
+      else previous->next = next;
+      free(segment);
+    } else {
+      segment->length = length;
+      previous = segment;
+    }
+    segment = next;
+  }
+}
+
 
 /*
  *******************************************************************
@@ -211,6 +289,8 @@ int nmmtl_combine_die(struct dielectric *dielectrics,
 				  dielectric_segments);
   
   if(status != SUCCESS) return(status);
+
+  nmmtl_reclassify_dielectric_segments(dielectrics, dielectric_segments);
   
   return(SUCCESS);
   

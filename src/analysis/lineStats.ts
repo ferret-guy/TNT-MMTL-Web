@@ -35,15 +35,31 @@ export function computeLineStats(
   fHz: number,
   diffMode: boolean,
 ): LineStats | null {
+  const firstCurveHz = curve.fHz[0];
+  const lastCurveHz = curve.fHz[curve.fHz.length - 1];
+  // Never silently label a clamped endpoint as a different design frequency.
+  // The caller must supply a curve that actually covers the requested point.
+  if (
+    !Number.isFinite(fHz) ||
+    !Number.isFinite(firstCurveHz) ||
+    !Number.isFinite(lastCurveHz) ||
+    fHz < firstCurveHz ||
+    fHz > lastCurveHz
+  ) return null;
   const v = diffMode && result.velocityOdd != null ? result.velocityOdd : result.velocity[0];
   const delayPerM = diffMode && result.delayOdd != null ? result.delayOdd : result.delay[0];
   const rdc = result.Rdc[0]?.[0];
+  const modeledRdc =
+    Number.isFinite(curve.rdcSignalOhmPerM) &&
+    Number.isFinite(curve.rdcReferenceOhmPerM)
+      ? curve.rdcSignalOhmPerM + curve.rdcReferenceOhmPerM
+      : rdc;
   if (!Number.isFinite(v) || !Number.isFinite(delayPerM)) return null;
   const phaseRad = (2 * Math.PI * fHz * lengthM) / v;
   return {
     lengthM,
     fHz,
-    rdcOhm: Number.isFinite(rdc) ? rdc * lengthM : NaN,
+    rdcOhm: Number.isFinite(modeledRdc) ? modeledRdc * lengthM : NaN,
     lossDb: -at(curve, 'alphaTotal', fHz) * lengthM,
     lossCondDb: -at(curve, 'alphaC', fHz) * lengthM,
     lossDielDb: -at(curve, 'alphaD', fHz) * lengthM,

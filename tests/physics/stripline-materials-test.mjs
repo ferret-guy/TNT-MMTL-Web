@@ -13,10 +13,18 @@ const {
   materialAtFrequency,
 } = await import('../../src/model/materials.ts');
 const { decodeHash, defaultState, encodeConfig } = await import('../../src/model/store.ts');
+const { signalCount } = await import('../../src/model/types.ts');
 
 function dielectric(stackup, id) {
   return stackup.items.find((item) => item.kind === 'DielectricLayer' && item.id === id);
 }
+
+test('preset signal count expands grouped differential conductors', () => {
+  for (const kind of ['microstrip', 'stripline', 'cpw']) {
+    assert.equal(signalCount(buildPreset(kind, 'se', defaultParams(kind, 'se'))), 1);
+    assert.equal(signalCount(buildPreset(kind, 'diff', defaultParams(kind, 'diff'))), 2);
+  }
+});
 
 test('laminates have stable unique IDs and JLC presets carry frequency samples', () => {
   assert.deepEqual(
@@ -32,7 +40,7 @@ test('laminates have stable unique IDs and JLC presets carry frequency samples',
   }
   for (const laminate of JLCPCB_LAMINATES) {
     assert.ok(laminate.samples.length >= 2, `${laminate.id} needs a dispersive lookup`);
-    assert.equal(laminate.note, 'Interpolated from vendor data');
+    assert.ok(laminate.note);
     for (let i = 0; i < laminate.samples.length; i++) {
       const sample = laminate.samples[i];
       assert.ok(Number.isFinite(sample.fHz) && sample.fHz > 0);
@@ -41,6 +49,8 @@ test('laminates have stable unique IDs and JLC presets carry frequency samples',
       if (i > 0) assert.ok(sample.fHz > laminate.samples[i - 1].fHz, 'samples must be sorted');
     }
   }
+  assert.match(JLCPCB_LAMINATES[0].note, /higher-frequency .* estimates/i);
+  assert.match(JLCPCB_LAMINATES[1].note, /vendor data/i);
 });
 
 test('material lookup is exact at samples, log-frequency interpolated, and endpoint-clamped', () => {

@@ -9,7 +9,8 @@
  *    [cx, cx + maxWidth]
  *  - dielectric blocks sit above the current layer top plus yOffset;
  *    trapezoids are centered in max(topWidth,bottomWidth), matching the
- *    conductor placement convention
+ *    conductor placement convention; circular dielectric sets repeat by
+ *    pitch from the lower-left corner of each bounding square
  *  - domain (dielectric/ground extent) is x in [-totW, +2 totW], where
  *    totW = max over conductor sets of (xOffset + (n-1) pitch + maxWidth)
  *  - bottom ground plane at y=0; top ground plane (if 2) at the top of the
@@ -17,7 +18,13 @@
  */
 import type { Stackup, StackupItem } from '../model/types.ts';
 import { isConductor } from '../model/types.ts';
+import { solverSignalBindings } from '../xsctn/generate.ts';
 import { formatDim, type DimUnit } from './dimField.ts';
+import {
+  clearGroundCurrentHoverInteraction,
+  renderGroundCurrentOverlay,
+  type GroundCurrentOverlayOptions,
+} from './groundCurrentPlot.ts';
 
 export interface PlacedPoly {
   kind: 'layer' | 'block' | 'conductor' | 'ground';
@@ -59,6 +66,7 @@ export function computeGeometry(s: Stackup): Geometry {
   let yMax = 0;
   const polys: PlacedPoly[] = [];
   const signalNames: string[] = [];
+  const signalBindings = solverSignalBindings(s);
   let groundPlanes = 0;
   let signalIdx = 0;
 
@@ -136,6 +144,36 @@ export function computeGeometry(s: Stackup): Geometry {
         yMax = Math.max(yMax, ty);
         break;
       }
+      case 'CircleDielectric': {
+        const by = y + it.yOffset;
+        const radius = it.diameter / 2;
+        for (let member = 0; member < it.number; member++) {
+          const x0 = it.xOffset + member * it.pitch;
+          const centerX = x0 + radius;
+          const centerY = by + radius;
+          const pts: Array<[number, number]> = [];
+          for (let point = 0; point < 48; point++) {
+            const angle = point / 48 * 2 * Math.PI;
+            pts.push([
+              centerX + radius * Math.cos(angle),
+              centerY + radius * Math.sin(angle),
+            ]);
+          }
+          polys.push({
+            kind: 'block',
+            item: it,
+            pts,
+            x0,
+            y0: by,
+            x1: x0 + it.diameter,
+            y1: by + it.diameter,
+            isGroundConductor: false,
+            er: it.permittivity,
+          });
+        }
+        yMax = Math.max(yMax, by + it.diameter);
+        break;
+      }
       default: {
         // conductor set
         const cy = y + it.yOffset;
@@ -189,7 +227,9 @@ export function computeGeometry(s: Stackup): Geometry {
           });
           yMax = Math.max(yMax, y1);
           if (sig) {
-            signalNames.push(`signal ${signalIdx + 1}`);
+            signalNames.push(
+              signalBindings[signalIdx]?.solverName ?? `signal ${signalIdx + 1}`,
+            );
             signalIdx++;
           }
         }
@@ -247,14 +287,20 @@ export interface Viewport {
  * Focus viewport centered on the conductors, with headroom above the tallest
  * feature so dimension callouts are never clipped.
  */
-export function computeViewport(g: Geometry): Viewport {
+export function computeViewport(
+  g: Geometry,
+  viewWidthMultiplier = 1,
+  equalAxisScale = false,
+): Viewport {
   const conductors = g.polys.filter((p) => p.kind === 'conductor');
   let vx0 = g.domainX0;
   let vx1 = g.domainX1;
   if (conductors.length) {
     const cx0 = Math.min(...conductors.map((p) => p.x0));
     const cx1 = Math.max(...conductors.map((p) => p.x1));
-    const focus = Math.max((cx1 - cx0) * 1.8, g.yMax * 4);
+    const focus =
+      Math.max((cx1 - cx0) * 1.8, g.yMax * 4) *
+      Math.max(1, viewWidthMultiplier);
     vx0 = Math.max(g.domainX0, (cx0 + cx1) / 2 - focus / 2);
     vx1 = Math.min(g.domainX1, (cx0 + cx1) / 2 + focus / 2);
   }
@@ -262,12 +308,31 @@ export function computeViewport(g: Geometry): Viewport {
   // Three horizontal callout lanes are needed by differential CPW
   // (width/ground width, coplanar gap, pair gap).
   const head = Math.max((g.yMax + gt) * 0.38, gt * 2); // callout headroom
-  const vy0 = -gt * 1.6;
-  const vy1 = g.yMax + head;
-  const w = vx1 - vx0;
-  const h = vy1 - vy0;
+  let vy0 = -gt * 1.6;
+  let vy1 = g.yMax + head;
+  let w = vx1 - vx0;
+  let h = vy1 - vy0;
   const W = 640;
   const H = Math.max(220, Math.min(400, (W * h) / w));
+  if (equalAxisScale) {
+    // The normal compact viewport clamps its height, which intentionally lets
+    // X and Y use different scales. Circular conductors need a physical 1:1
+    // scale instead. Preserve the panel's compact dimensions and add symmetric
+    // model-space whitespace along whichever axis is too short.
+    const requiredHeight = (w * H) / W;
+    if (requiredHeight > h) {
+      const extra = requiredHeight - h;
+      vy0 -= extra / 2;
+      vy1 += extra / 2;
+      h = requiredHeight;
+    } else {
+      const requiredWidth = (h * W) / H;
+      const extra = requiredWidth - w;
+      vx0 -= extra / 2;
+      vx1 += extra / 2;
+      w = requiredWidth;
+    }
+  }
   const pad = VIEWPORT_PAD;
   const sx = (x: number) => ((x - vx0) / w) * W * (1 - 2 * pad) + W * pad;
   const sy = (y: number) => H - (((y - vy0) / h) * H * (1 - 2 * pad) + H * pad);
@@ -298,6 +363,16 @@ export interface RenderOptions {
   coverProfile?: { tCopper: number; tBase: number; tBetween: number };
   /** active guided preset, used to map geometry-specific callouts */
   presetKind?: 'microstrip' | 'stripline' | 'cpw';
+  /** show native solver conductor names on free-form signal copper */
+  showSignalNames?: boolean;
+  /** leave dielectric regions unfilled while retaining their outlines */
+  blankDielectric?: boolean;
+  /** widen the physical lateral viewport around the conductor center */
+  viewWidthMultiplier?: number;
+  /** use one physical-to-pixel scale for both axes (keeps circles round) */
+  equalAxisScale?: boolean;
+  /** append a current-density chart using this geometry's horizontal scale */
+  groundCurrentOverlay?: GroundCurrentOverlayOptions;
 }
 
 export function renderCrossSection(
@@ -306,14 +381,35 @@ export function renderCrossSection(
   opts: RenderOptions = {},
 ): Viewport {
   const g = computeGeometry(s);
-  const vp = computeViewport(g);
+  const vp = computeViewport(
+    g,
+    opts.viewWidthMultiplier,
+    opts.equalAxisScale,
+  );
   const { sx, sy, W, H } = vp;
 
+  clearGroundCurrentHoverInteraction(svg);
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = '';
+  svg.removeAttribute('aria-label');
+  svg.setAttribute(
+    'aria-labelledby',
+    'cs-svg-title cs-svg-description',
+  );
   const ns = 'http://www.w3.org/2000/svg';
   const erMap = new Map<number, string>();
   const outline = !!opts.outline;
+  const dielectricFill = (fill: string) =>
+    opts.blankDielectric ? 'none' : fill;
+
+  const svgTitle = document.createElementNS(ns, 'title');
+  svgTitle.id = 'cs-svg-title';
+  svgTitle.textContent = 'Stackup cross-section';
+  const svgDescription = document.createElementNS(ns, 'desc');
+  svgDescription.id = 'cs-svg-description';
+  svgDescription.textContent =
+    'Physical geometry of the transmission-line cross-section.';
+  svg.append(svgTitle, svgDescription);
 
   const defs = document.createElementNS(ns, 'defs');
   defs.innerHTML = `<pattern id="gndhatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -357,17 +453,34 @@ export function renderCrossSection(
 
   // layers first, then blocks, then grounds + conductors on top
   for (const p of g.polys.filter((p) => p.kind === 'layer' && !isCoverPoly(p))) {
-    poly(p.pts, erColor(p.er!, erMap), '#b3c2ce', `εr = ${p.er}`);
+    poly(
+      p.pts,
+      dielectricFill(erColor(p.er!, erMap)),
+      '#b3c2ce',
+      `εr = ${p.er}`,
+    );
   }
   for (const p of g.polys.filter((p) => p.kind === 'block' && !isCoverPoly(p))) {
-    poly(p.pts, erColor(p.er!, erMap), '#9fb2c0', `dielectric block εr = ${p.er}`);
+    poly(
+      p.pts,
+      dielectricFill(erColor(p.er!, erMap)),
+      '#9fb2c0',
+      `dielectric block εr = ${p.er}`,
+    );
   }
   // The production solve's tied C1/C3 base layer and mitered C2 shoulders are
   // already the exact desired polygons. Paint those same polygons without
   // internal strokes so they read as one conformal mask profile in the SVG.
   for (const p of g.polys.filter(isExactCoverPoly)) {
-    const el = poly(p.pts, erColor(p.er!, erMap), 'none', `solder mask εr = ${p.er}`);
-    if (!outline) el.setAttribute('fill-opacity', '0.55');
+    const el = poly(
+      p.pts,
+      dielectricFill(erColor(p.er!, erMap)),
+      opts.blankDielectric ? '#8aa5b8' : 'none',
+      `solder mask εr = ${p.er}`,
+    );
+    if (!outline && !opts.blankDielectric) {
+      el.setAttribute('fill-opacity', '0.55');
+    }
   }
   for (const p of g.polys.filter((p) => p.kind === 'ground')) {
     poly(p.pts, 'url(#gndhatch)', '#5c6b7e', 'ground plane');
@@ -397,8 +510,15 @@ export function renderCrossSection(
       }
     }
     pts.push([last.x1, last.y0]);
-    const el = poly(pts, erColor(first.er!, erMap), '#8aa5b8', `solder mask εr = ${first.er}`);
-    if (!outline) el.setAttribute('fill-opacity', '0.55');
+    const el = poly(
+      pts,
+      dielectricFill(erColor(first.er!, erMap)),
+      '#8aa5b8',
+      `solder mask εr = ${first.er}`,
+    );
+    if (!outline && !opts.blankDielectric) {
+      el.setAttribute('fill-opacity', '0.55');
+    }
   } else if (coverLayer) {
     // side slope matched to the first signal trapezoid's etch angle
     const trap = s.items.find((i) => i.kind === 'TrapezoidConductors');
@@ -452,8 +572,35 @@ export function renderCrossSection(
       }
       pts.push([coverLayer.x1, yL], [coverLayer.x1, yB]);
     }
-    const el = poly(pts, erColor(coverLayer.er!, erMap), '#8aa5b8', `solder mask εr = ${coverLayer.er}`);
-    if (!outline) el.setAttribute('fill-opacity', '0.55');
+    const el = poly(
+      pts,
+      dielectricFill(erColor(coverLayer.er!, erMap)),
+      '#8aa5b8',
+      `solder mask εr = ${coverLayer.er}`,
+    );
+    if (!outline && !opts.blankDielectric) {
+      el.setAttribute('fill-opacity', '0.55');
+    }
+  }
+
+  if (opts.showSignalNames && !outline) {
+    for (const conductor of g.polys.filter(
+      (poly) =>
+        poly.kind === 'conductor' &&
+        !poly.isGroundConductor &&
+        poly.signalIndex != null,
+    )) {
+      const name = g.signalNames[conductor.signalIndex!];
+      if (!name) continue;
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', String((sx(conductor.x0) + sx(conductor.x1)) / 2));
+      label.setAttribute('y', String((sy(conductor.y0) + sy(conductor.y1)) / 2));
+      label.setAttribute('class', 'cs-solver-name');
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('dominant-baseline', 'middle');
+      label.textContent = name;
+      svg.appendChild(label);
+    }
   }
 
   // dimension callouts: line + label grouped, hover glows the mapped form
@@ -597,5 +744,14 @@ export function renderCrossSection(
           `mask = ${fmt(prof.tBase)}`, 'start');
     }
   }
+  const renderedHeight = opts.groundCurrentOverlay
+    ? renderGroundCurrentOverlay(
+      svg,
+      g,
+      vp,
+      opts.groundCurrentOverlay,
+    )
+    : H;
+  svg.setAttribute('viewBox', `0 0 ${W} ${renderedHeight}`);
   return vp;
 }
