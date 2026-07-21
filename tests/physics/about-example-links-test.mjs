@@ -37,6 +37,8 @@ const {
 const {
   perimeterM,
   presetLossTangentAtFrequency,
+  roughnessK,
+  skinDepthM,
   UNIT_SCALE,
 } = await import('../../src/analysis/losses.ts');
 const {
@@ -569,9 +571,20 @@ function signalResistanceMatrix(input, frequencyHz) {
       : geometricRdc;
     const skinCoefficient = Math.sqrt(Math.PI * MU0 / conductor.conductivity) /
       perimeterM(conductor, input.unitScaleM);
+    const roughnessSizeM = (
+      input.lossParams.roughnessModel === 'huray'
+        ? input.lossParams.hurayRadiusUm
+        : input.lossParams.roughnessRqUm
+    ) * 1e-6;
+    const roughnessMultiplier = roughnessK(
+      input.lossParams.roughnessModel,
+      roughnessSizeM,
+      skinDepthM(frequencyHz, conductor.conductivity),
+      input.lossParams.hurayRatio,
+    );
     matrix[index][index] = Math.hypot(
       rdc,
-      skinCoefficient * Math.sqrt(frequencyHz),
+      roughnessMultiplier * skinCoefficient * Math.sqrt(frequencyHz),
     );
   }
   return matrix;

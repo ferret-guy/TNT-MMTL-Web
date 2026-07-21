@@ -169,7 +169,7 @@ export const WIDE_RIBBON_CABLE_EXAMPLE_STATE: AppState = freeformState(
   1e6,
 );
 
-export const CAT5E_PAIR_EXAMPLE_STATE: AppState = freeformState(
+const CAT5E_PAIR_BASE_STATE = freeformState(
   {
     title: 'Belden Cat5e pair straight-section approximation',
     units: 'mils',
@@ -204,6 +204,15 @@ export const CAT5E_PAIR_EXAMPLE_STATE: AppState = freeformState(
   },
   1e8,
 );
+
+export const CAT5E_PAIR_EXAMPLE_STATE: AppState = {
+  ...CAT5E_PAIR_BASE_STATE,
+  lossParams: {
+    ...CAT5E_PAIR_BASE_STATE.lossParams,
+    roughnessModel: 'hammerstad',
+    roughnessRqUm: 5,
+  },
+};
 
 /** Relative calculator link suitable for an About-page anchor. */
 export function freeformExampleHref(state: AppState): string {

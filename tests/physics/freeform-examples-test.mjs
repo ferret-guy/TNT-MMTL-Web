@@ -131,6 +131,8 @@ test('free-form examples preserve their source-derived geometry and app settings
   assert.equal(cat5.lineLengthM, 1);
   assert.equal(cat5.riseTimePs, 100);
   assert.equal(cat5.designFreqHz, 1e8);
+  assert.equal(cat5.lossParams.roughnessModel, 'hammerstad');
+  assert.equal(cat5.lossParams.roughnessRqUm, 5);
   assert.equal(cat5.freeform.title, 'Belden Cat5e pair straight-section approximation');
   assert.equal(cat5.freeform.units, 'mils');
   assert.equal(cat5.freeform.cseg, 45);
@@ -245,6 +247,18 @@ test('free-form example links round-trip through the readable hash schema', () =
     assert.equal(decoded?.lineLengthM, 1);
     assert.equal(decoded?.riseTimePs ?? defaultState().riseTimePs, 100);
     assert.equal(decoded?.designFreqHz, example.state.designFreqHz);
+    const decodedLossParams = {
+      ...defaultState().lossParams,
+      ...(decoded?.lossParams ?? {}),
+    };
+    assert.equal(
+      decodedLossParams.roughnessModel,
+      example.state.lossParams.roughnessModel,
+    );
+    assert.equal(
+      decodedLossParams.roughnessRqUm,
+      example.state.lossParams.roughnessRqUm,
+    );
   }
 });
 
