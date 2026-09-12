@@ -24,19 +24,19 @@
 typedef struct graphic_text_window
 {
     int    name;    /* Name of graphical I/O window */
-    float  vxmin, vxmax, vymin, vymax;  /* Virtual window boundaries */
-    float  wxmin, wxmax, wymin, wymax;  /* World window boundaries */
-    float  left_margin,   /*  These margins delimit where the text will  */ 
+    double  vxmin, vxmax, vymin, vymax;  /* Virtual window boundaries */
+    double  wxmin, wxmax, wymin, wymax;  /* World window boundaries */
+    double  left_margin,   /*  These margins delimit where the text will  */ 
            right_margin,  /*  be drawn within the I/O window. They are   */
            top_margin,    /*  specified in world coordinates.            */
            bottom_margin; 
-    float  char_height,   /* These define the height and width of a          */
+    double  char_height,   /* These define the height and width of a          */
            char_width;    /* character in world coordinates.                 */
-    float  char_gap;      /* Defines the amount of space between charac-     */
+    double  char_gap;      /* Defines the amount of space between charac-     */
                           /* ters as   space =  char_gap * char_width.       */
-    float  line_gap;      /* Defines the amount of space between lines       */
+    double  line_gap;      /* Defines the amount of space between lines       */
                           /* as  space = line_gap * char_height.             */
-    float  aspect_ratio;  /* The aspect ratio of the device                  */
+    double  aspect_ratio;  /* The aspect ratio of the device                  */
     int    border_color;  /* Color of the border around the I/O window       */
     int    text_color;    /* Color of the text within the I/O window         */
     int    background_color; /* Background Color within the I/O window       */
@@ -56,7 +56,7 @@ typedef struct graphic_text_window
                            * be set to the value designated by the '[]'
 			   *-------------------------------------------------*/
     int    line_count;    /* Current line being written to in window. [0]    */
-    float  locx,locy;     /* Current character position being written to in
+    double  locx,locy;     /* Current character position being written to in
 			     window.   [left_margin]                         */
     int    stop_count;    /* Controls when confirming is done. [0]           */
     char   **(*lines);   /* memory to hold the text that is currently in

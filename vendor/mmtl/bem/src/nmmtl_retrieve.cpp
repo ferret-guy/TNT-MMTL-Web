@@ -73,8 +73,8 @@
   FILE *retrieve_file                - where to write dumpy things to.
   int *cntr_seg,                     - cseg parameter
   int *pln_seg,                      - dseg parameter
-  float *coupling                    - coupling length
-  float *risetime                    - risetime
+  double *coupling                    - coupling length
+  double *risetime                    - risetime
   struct contour **psignals          - signals data structure
   int *pconductor_counter,           - how many conductors (gnd not included)
   CONDUCTOR_DATA_P *pconductor_data, - array of data on conductors
@@ -96,8 +96,8 @@
 int nmmtl_retrieve(FILE *retrieve_file,
 			       int *cntr_seg,
 			       int *pln_seg,
-			       float *coupling,
-			       float *risetime,
+			       double *coupling,
+			       double *risetime,
 			       CONTOURS_P *psignals,
 			       int *sig_cnt,
 			       int *pconductor_counter,
@@ -113,10 +113,10 @@ int nmmtl_retrieve(FILE *retrieve_file,
   CONDUCTOR_DATA_P conductor_data;
   DELEMENTS_P die_elements;
   int temp[2];
-  float ftemp[2];
+  double ftemp[2];
   
   
-  if(fscanf(retrieve_file,"%d %d %g %g\n",
+  if(fscanf(retrieve_file,"%d %d %lg %lg\n",
 	    &temp[0],&temp[1],&ftemp[0],&ftemp[1]) != 4) return(FAIL);
   *cntr_seg = temp[0];
   *pln_seg = temp[1];
@@ -196,7 +196,7 @@ int nmmtl_retrieve(FILE *retrieve_file,
       ce->edge[0] = NULL;
       ce->edge[1] = NULL;
       
-      sscanf(line,"%f %d %d",&ce->epsilon,&edge0,&edge1);
+      sscanf(line,"%lf %d %d",&ce->epsilon,&edge0,&edge1);
       
       /* skip over first three fields */
       i = 0;
@@ -211,7 +211,7 @@ int nmmtl_retrieve(FILE *retrieve_file,
       {
   
 	ce->edge[0] = (EDGEDATA_P)malloc(sizeof(EDGEDATA));
-	sscanf(&line[i],"%f %f",&ce->edge[0]->nu,
+	sscanf(&line[i],"%lf %lf",&ce->edge[0]->nu,
 	       &ce->edge[0]->free_space_nu);
 	/* skip these two fields */
 	while(line[i] != ' ') i++;
@@ -223,7 +223,7 @@ int nmmtl_retrieve(FILE *retrieve_file,
       {
   
 	ce->edge[1] = (EDGEDATA_P)malloc(sizeof(EDGEDATA));
-	sscanf(&line[i],"%f %f",&ce->edge[1]->nu,
+	sscanf(&line[i],"%lf %lf",&ce->edge[1]->nu,
 	       &ce->edge[1]->free_space_nu);
 	/* skip these two fields */
 	while(line[i] != ' ') i++;
@@ -233,7 +233,7 @@ int nmmtl_retrieve(FILE *retrieve_file,
       }
       for(i = 0; i < 3; i++)
       {
-	if(fscanf(retrieve_file,"%d %f %f\n",&ce->node[i],
+	if(fscanf(retrieve_file,"%d %lf %lf\n",&ce->node[i],
 		  &ce->xpts[i],&ce->ypts[i]) != 3) return(FAIL);
 	
       }
@@ -257,14 +257,14 @@ int nmmtl_retrieve(FILE *retrieve_file,
     }
     
     die_elements->next = NULL;
-    if(sscanf(line,"%f %f %f %f\n",
+    if(sscanf(line,"%lf %lf %lf %lf\n",
 	      &die_elements->epsilonplus,&die_elements->epsilonminus,
 	      &die_elements->normalx,&die_elements->normaly) != 4)
       return(FAIL);
     
     for(i = 0; i < 3; i++)
     {
-      fscanf(retrieve_file,"%d %f %f\n",&die_elements->node[i],
+      fscanf(retrieve_file,"%d %lf %lf\n",&die_elements->node[i],
 	     &die_elements->xpts[i],&die_elements->ypts[i]);
     }
     if(fgets(line,255,retrieve_file) == NULL) return(FAIL);

@@ -139,11 +139,11 @@ function subIntegrate(
   for (let k = 0; k < 8; k++) {
     const xi = mid + half * GAUSS8_X[k];
     const [n0, n1, n2] = shape(xi);
-    const [d0, d1, d2] = dShape(xi);
+    const [, d1, d2] = dShape(xi);
     const gx = n0 * el.x[0] + n1 * el.x[1] + n2 * el.x[2];
     const gy = n0 * el.y[0] + n1 * el.y[1] + n2 * el.y[2];
-    const jx = d0 * el.x[0] + d1 * el.x[1] + d2 * el.x[2];
-    const jy = d0 * el.y[0] + d1 * el.y[1] + d2 * el.y[2];
+    const jx = d1 * (el.x[1] - el.x[0]) + d2 * (el.x[2] - el.x[0]);
+    const jy = d1 * (el.y[1] - el.y[0]) + d2 * (el.y[2] - el.y[0]);
     const jac = Math.hypot(jx, jy);
     const sig = n0 * el.sigma[0] + n1 * el.sigma[1] + n2 * el.sigma[2];
     // solver kernel: ln(d_image / d_direct), with the source reflected
@@ -292,9 +292,9 @@ function integratedCharge(el: PreppedElement): number {
   for (let k = 0; k < GAUSS8_X.length; k++) {
     const xi = GAUSS8_X[k];
     const [n0, n1, n2] = shape(xi);
-    const [d0, d1, d2] = dShape(xi);
-    const jx = d0 * el.x[0] + d1 * el.x[1] + d2 * el.x[2];
-    const jy = d0 * el.y[0] + d1 * el.y[1] + d2 * el.y[2];
+    const [, d1, d2] = dShape(xi);
+    const jx = d1 * (el.x[1] - el.x[0]) + d2 * (el.x[2] - el.x[0]);
+    const jy = d1 * (el.y[1] - el.y[0]) + d2 * (el.y[2] - el.y[0]);
     const sigma = n0 * el.sigma[0] + n1 * el.sigma[1] + n2 * el.sigma[2];
     charge += GAUSS8_W[k] * sigma * Math.hypot(jx, jy);
   }

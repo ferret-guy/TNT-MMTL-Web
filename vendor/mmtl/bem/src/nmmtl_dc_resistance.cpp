@@ -12,12 +12,12 @@
 // calculate the area for a polygon, this formula is derived from
 // the surface integral converted to a line integral
 ////////////////////////////////////////////////////////////////
-static float nmmtlPolyArea(CONTOURS_P item)
+static double nmmtlPolyArea(CONTOURS_P item)
 {
   POLYPOINTS *point;
-  float area;
-  float x0;
-  float y0;
+  double area;
+  double x0;
+  double y0;
   
   area = 0;
   point = item->points;
@@ -34,21 +34,21 @@ static float nmmtlPolyArea(CONTOURS_P item)
   return fabs(area/2.0);
 }
   
-void nmmtl_dc_resistance(float the_conductivity,
+void nmmtl_dc_resistance(double the_conductivity,
 			 CONTOURS_P signals, 
-			 float **Rdc,
+			 double **Rdc,
 			 FILE *fp1,
 			 FILE *fp2)
 {
   CONTOURS_P item;
   CONTOURS_P sig_line1;
   CONTOURS_P sig_line2;;
-  float area;
+  double area;
   int i;
   int j;
   FILE *output_fp;
   
-  float conductivity = the_conductivity;
+  double conductivity = the_conductivity;
 
   for (i =0,sig_line1 = signals; 
        sig_line1 != NULL; 
@@ -104,7 +104,7 @@ void nmmtl_dc_resistance(float the_conductivity,
 	       sig_line2 != NULL;
 	       sig_line2 = sig_line2->next, j++)
 	    {
-	      fprintf(output_fp, "Rdc( ::%s , ::%s )= %15.7e\n",
+	      fprintf(output_fp, "Rdc( ::%s , ::%s )= %24.16le\n",
 		      sig_line1->name, sig_line2->name, Rdc[i][j]);
 	    }
 	}

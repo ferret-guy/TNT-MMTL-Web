@@ -185,11 +185,11 @@ void parseVal (char *line, int flg, char *tmp)
 
 int nmmtl_parse_graphic(char *filename,
 			int *cntr_seg,int *pln_seg,
-			float *coupling,float *risetime,
-			float *conductivity, float *frequency,
-			float *half_minimum_dimension,int *gnd_planes,
-			float *top_ground_plane_thickness,
-			float *bottom_ground_plane_thickness,
+			double *coupling,double *risetime,
+			double *conductivity, double *frequency,
+			double *half_minimum_dimension,int *gnd_planes,
+			double *top_ground_plane_thickness,
+			double *bottom_ground_plane_thickness,
 			struct dielectric **dielectrics,
 			struct contour **signals,
 			struct contour **groundwires,
@@ -214,7 +214,7 @@ int nmmtl_parse_graphic(char *filename,
   double highest_dielectric = -1.0e20; /* the level of the top of the highest */
                                       /* dielectric, initialized to some very*/
                                       /* unlikely number. */
-  float minimum_dimension = FLT_MAX;
+  double minimum_dimension = FLT_MAX;
   
   int upper_ground_planes = 0;  /* keep count of drawn ground planes */
   int lower_ground_planes = 0;
@@ -277,7 +277,9 @@ int nmmtl_parse_graphic(char *filename,
   int tmp_cntr_seg, tmp_pln_seg;
   int lgt;
 
-  while ( 1 ) 
+  for (int edge=0; edge<4; ++edge) nmmtl_trapezoid_edge_segments[edge]=0;
+
+  while ( 1 )
     {
       if ( fgets (line, GPGE_MAX, inpf) == NULL )
 	{
@@ -308,8 +310,8 @@ int nmmtl_parse_graphic(char *filename,
 	  if ( (sscanf (tmp, "%lf%s", &arg1, arg2)) < 2 )
 	    strcat (tmp, "meters");
 	  conversion (tmp, meters, dbl);
-	  *coupling = (float) dbl;
-	  printf ("CouplingLength = %g\n", dbl);
+	  *coupling = (double) dbl;
+	  printf ("CouplingLength = %lg\n", dbl);
 	}
       if ( strstr (line, "riseTime") != NULL )
 	{
@@ -318,14 +320,14 @@ int nmmtl_parse_graphic(char *filename,
 	    {
 	      strcat (tmp, "ps");
 	      conversion (tmp, seconds, dbl);
-	      *risetime = (float) dbl;
+	      *risetime = (double) dbl;
 	    }
 	  else
 	    {
 	      conversion (tmp, seconds, dbl);
-	      *risetime = (float) dbl;
+	      *risetime = (double) dbl;
 	    }
-	  printf ("RiseTime = %g\n", *risetime);
+	  printf ("RiseTime = %lg\n", *risetime);
 	}
       if ( strstr (line, "defaultLeng") != NULL )
 	{
@@ -335,6 +337,18 @@ int nmmtl_parse_graphic(char *filename,
 	  printf ("Default Units: %s\n", defaultUnits);
 	}
 
+      if (strncmp(line, "set EDGE_SEGMENTS ", 18) == 0) {
+        char extra;
+        int *counts = nmmtl_trapezoid_edge_segments;
+        const int parsed = sscanf(line, "%*s %*s %d %d %d %d %c",
+                                  &counts[0], &counts[1], &counts[2], &counts[3], &extra);
+        if (parsed != 4 || counts[0]<2 || counts[1]<2 || counts[2]<2 || counts[3]<2 ||
+            counts[0]>1000 || counts[1]>1000 || counts[2]>1000 || counts[3]>1000) {
+          fprintf(stderr, "EDGE_SEGMENTS requires four integers in [2,1000]\n");
+          fclose(inpf);
+          return FAIL;
+        }
+      }
       if ( strstr (line, "CSEG") != NULL )
 	  sscanf (line, "%*s %*s %d", &tmp_cntr_seg);
       if ( strstr (line, "DSEG") != NULL )
@@ -354,7 +368,7 @@ int nmmtl_parse_graphic(char *filename,
   if ( *risetime == 0 )
     {
       *risetime = DEFAULT_RISETIME * 1.0e-12;
-      printf ("Assign a default value of %g to risetime\n", *risetime);
+      printf ("Assign a default value of %lg to risetime\n", *risetime);
     }
 
   //
@@ -370,11 +384,11 @@ int nmmtl_parse_graphic(char *filename,
       *coupling = DEFAULT_COUPLING;
       *coupling *= INCHES_TO_METERS;
       /* warn about using default values in user's selected units */
-      sprintf(msg, "Default=%g mils used\n",
-	      (float)((*coupling) / MILS_TO_METERS));
+      sprintf(msg, "Default=%lg mils used\n",
+	      (double)((*coupling) / MILS_TO_METERS));
       printf ("%s\n", msg);
     } else 
-      printf ("CouplingLength = %g\n", *coupling);
+      printf ("CouplingLength = %lg\n", *coupling);
 
 
   /* assign in user's units */
@@ -464,7 +478,7 @@ int nmmtl_parse_graphic(char *filename,
 	      // Thickness of the dielectric
 	      //-----------------------------------------------
 	      if ( strstr (line, "-permittivity") != NULL )
-		  sscanf (line, "%*s %f", &d_temp->constant);
+		  sscanf (line, "%*s %lf", &d_temp->constant);
 
 	      //-----------------------------------------------
 	      // End of this dielectric definition
@@ -531,7 +545,7 @@ int nmmtl_parse_graphic(char *filename,
 	      // Permittivity of the dielectric
 	      //-----------------------------------------------
 	      if ( strstr (line, "-permittivity") != NULL )
-		  sscanf (line, "%*s %f", &d_temp->constant);
+		  sscanf (line, "%*s %lf", &d_temp->constant);
 
 	      //-----------------------------------------------
 	      // Number of conductors to the set
@@ -589,7 +603,7 @@ int nmmtl_parse_graphic(char *filename,
 	      
 	    }
 
-	  float cx = xOffset;
+	  double cx = xOffset;
 	  for ( indx = 0; indx < number; ++indx )
 	    {
 	      //-----------------------------------------------
@@ -629,7 +643,7 @@ int nmmtl_parse_graphic(char *filename,
 	{
 	  double botWidth = 0.0, topWidth = 0.0, height = 0.0;
 	  double xOffset = 0.0, yOffset = 0.0, pitch = 0.0;
-	  float permittivity = 1.0F;
+	  double permittivity = 1.0F;
 	  int indx, number = 1;
 
 	  while (1)
@@ -646,7 +660,7 @@ int nmmtl_parse_graphic(char *filename,
 		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
 		conversion(tmp,meters,height);
 	      }
-	      if ( strstr (line, "-permittivity") != NULL ) sscanf(line,"%*s %f",&permittivity);
+	      if ( strstr (line, "-permittivity") != NULL ) sscanf(line,"%*s %lf",&permittivity);
 	      if ( strstr (line, "-number") != NULL ) sscanf(line,"%*s %d",&number);
 	      if ( strstr (line, "-xOff") != NULL ) {
 		parseVal(line,1,tmp); if ((sscanf(tmp,"%lf%s",&arg1,arg2)) < 2) strcat(tmp,defaultUnits);
@@ -873,7 +887,7 @@ int nmmtl_parse_graphic(char *filename,
 	  if ( tw > totWidth )
 	    {
 	      totWidth = tw;
-	      printf ("Total width: %g\n", totWidth);
+	      printf ("Total width: %lg\n", totWidth);
 	    }
 
 	  for ( indx = 0; indx < number; ++indx )
@@ -1005,7 +1019,7 @@ int nmmtl_parse_graphic(char *filename,
 		*signals = c_temp;
 		sprintf (c_temp->name, "%s%c%d", name, type, *num_signals);
 		(*num_signals)++;
-		printf ("Conductivity %s = %g siemens/meter\n", c_temp->name, c_temp->conductivity);
+		printf ("Conductivity %s = %lg siemens/meter\n", c_temp->name, c_temp->conductivity);
 	      }
 	      else
 	      {

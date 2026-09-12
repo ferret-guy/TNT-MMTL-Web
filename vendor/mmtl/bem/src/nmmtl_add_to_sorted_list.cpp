@@ -177,11 +177,11 @@ main()
   FLT_KEY_LIST_P list,test;
   
 #define ADD_N_PRINT(KEY) \
-  printf("adding %f\n",KEY);\
+  printf("adding %lf\n",KEY);\
     nmmtl_add_to_sorted_list(&list,KEY,(char *)NULL);\
       printf("the list: ");\
 	for(test = list;test != NULL;test = test->next)\
-	{printf("%f,",test->key);}\
+	{printf("%lf,",test->key);}\
 	  printf("\n\n");
   
   list = NULL;

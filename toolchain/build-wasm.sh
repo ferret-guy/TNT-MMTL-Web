@@ -1,4 +1,5 @@
 #!/bin/bash
+# Double-precision numerical recipe v1.
 # Phase C: WebAssembly build with Emscripten (run under WSL with emsdk active,
 # or via: docker run --rm -v "$PWD:/src" -w /src emscripten/emsdk:3.1.61 bash toolchain/build-wasm.sh).
 #
@@ -17,7 +18,7 @@ command -v node >/dev/null || { echo "node not on PATH"; exit 1; }
 
 # Object/intermediate files go to WSL-local storage (Dropbox sync locks files
 # under /mnt/d mid-build); only the final bem.mjs/.wasm land in the project.
-OUT="$HOME/.cache/tnt-web/wasm"
+OUT="$HOME/.cache/tnt-web/wasm-double-q24-v1"
 GEN="$OUT/f2c-gen"
 LIBF2C="$HOME/.cache/tnt-web/libf2c"
 mkdir -p "$OUT/obj" "$GEN" "$TNTWEB_ROOT/public/wasm"
@@ -28,13 +29,12 @@ if [ ! -f "$LIBF2C/libf2c.a" ]; then
 fi
 
 # ---- 2. f2c translation (-R mandatory; see build-native-f2c.sh) ----
-if ! ls "$GEN"/*.c >/dev/null 2>&1; then
-  echo "== f2c -R translation"
-  for f in $FORTRAN_SOURCES; do
-    cp "$BEM_DIR/$f" "$GEN/$(basename "${f%.F}").f"
-  done
-  ( cd "$GEN" && f2c -R -w *.f > f2c.log 2>&1 ) || { tail -20 "$GEN/f2c.log"; exit 1; }
-fi
+# Always regenerate after precision or Fortran source changes.
+echo "== f2c -r8 -R translation"
+for f in $FORTRAN_SOURCES; do
+  cp "$BEM_DIR/$f" "$GEN/$(basename "${f%.F}").f"
+done
+( cd "$GEN" && f2c -r8 -R -w *.f > f2c.log 2>&1 ) || { tail -20 "$GEN/f2c.log"; exit 1; }
 
 # ---- 3. compile ----
 CXXFLAGS=(-O2 -DFORTRAN_UNDERBARS -DHAVE_GETLOGIN "-I$SRC_DIR" -std=gnu++14 -Wno-write-strings -fpermissive -w)
@@ -44,26 +44,29 @@ CFLAGS=(-O2 "-I$LIBF2C/src" -w)
 echo "== em++ C++ ($(echo "$CPP_SOURCES" | wc -l) TUs)"
 for f in $CPP_SOURCES; do
   o="$OUT/obj/$(basename "${f%.cpp}").o"
-  [ "$o" -nt "$BEM_DIR/$f" ] && continue
   em++ "${CXXFLAGS[@]}" -c "$BEM_DIR/$f" -o "$o"
 done
 
 echo "== emcc f2c output"
 for c in "$GEN"/*.c; do
   o="$OUT/obj/$(basename "${c%.c}")_f.o"
-  [ "$o" -nt "$c" ] && continue
   emcc "${CFLAGS[@]}" -c "$c" -o "$o"
 done
 
 # ---- 4. link (locally, then copy: Dropbox locks in-place renames on /mnt/d) ----
 echo "== linking bem.mjs"
+# Older Emscripten releases do not have the resizable-buffer setting.
+MEMORY_FLAGS=(-sALLOW_MEMORY_GROWTH=1)
+if grep -q 'var GROWABLE_ARRAYBUFFERS' "$(dirname "$(command -v emcc)")/src/settings.js"; then
+  MEMORY_FLAGS+=(-sGROWABLE_ARRAYBUFFERS=0)
+fi
 # Keep memory growth without exposing resizable heap views to browser APIs.
 em++ -O2 "$OUT"/obj/*.o "$LIBF2C/libf2c.a" \
   -o "$OUT/bem.mjs" \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createBemModule \
   -sENVIRONMENT=web,worker,node \
   -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 \
-  -sALLOW_MEMORY_GROWTH=1 -sGROWABLE_ARRAYBUFFERS=0 \
+  "${MEMORY_FLAGS[@]}" \
   -sINITIAL_MEMORY=67108864 -sSTACK_SIZE=4194304 \
   -sEXPORTED_RUNTIME_METHODS=FS,callMain \
   -sASSERTIONS=0 2> "$OUT/link.log" || { cat "$OUT/link.log"; exit 1; }
@@ -74,5 +77,6 @@ if grep -q "signature mismatch" "$OUT/link.log"; then
 fi
 cp -f "$OUT/bem.mjs" "$OUT/bem.wasm" "$TNTWEB_ROOT/public/wasm/"
 rm -f "$TNTWEB_ROOT/public/wasm/"*.temp-stream-* 2>/dev/null || true
+python3 "$TNTWEB_ROOT/toolchain/record-solver-build.py"
 ls -la "$TNTWEB_ROOT/public/wasm/"
 echo "OK"

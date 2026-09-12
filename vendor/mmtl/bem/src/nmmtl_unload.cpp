@@ -70,7 +70,7 @@
   
   FORMAL PARAMETERS:
   
-  float *potential_vector            - vector of potential on all elements
+  double *potential_vector            - vector of potential on all elements
   int conductor_number               - the number of the conductor to unset to
   one volt potential
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
@@ -86,7 +86,7 @@
   
   */
 
-void nmmtl_unload(float *potential_vector,int conductor_number,
+void nmmtl_unload(double *potential_vector,int conductor_number,
 		  CONDUCTOR_DATA_P conductor_data)
 {
   int i;

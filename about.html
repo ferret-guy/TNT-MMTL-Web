@@ -33,13 +33,10 @@
       <section aria-labelledby="what-heading">
         <h2 id="what-heading">What Web-MMTL Is</h2>
         <p>
-          MMTL was developed from <a href="https://sppdglab.mayo.edu/about-sppdg/history.html" target="_blank" rel="noopener noreferrer">Mayo Clinic transmission-line research</a> beginning in the 1980s and was <a href="https://mmtl.sourceforge.net/" target="_blank" rel="noopener noreferrer">publicly released under the GPL in 2004</a>. It is a <a href="https://mmtl.sourceforge.net/user-guide/node8.html" target="_blank" rel="noopener noreferrer">2-D/2.5-D field solver</a> for trace impedance, propagation, crosstalk, and conductor coupling. TNT is the original GUI for Metal Everywhere; Web-MMTL is this browser interface.
+          MMTL was developed from <a href="https://sppdglab.mayo.edu/about-sppdg/history.html" target="_blank" rel="noopener noreferrer">Mayo Clinic transmission-line research</a> beginning in the 1980s and was <a href="https://mmtl.sourceforge.net/" target="_blank" rel="noopener noreferrer">publicly released under the GPL in 2004</a>. It is a <a href="https://mmtl.sourceforge.net/user-guide/node8.html" target="_blank" rel="noopener noreferrer">2-D/2.5-D field solver</a> for trace impedance, propagation, crosstalk, and conductor coupling.
         </p>
         <p>
           It uses a boundary-element and method-of-moments field solution. It's as accurate as expensive commercial tools like <a href="https://www.polarinstruments.com/products/si/Si9000.html" target="_blank" rel="noopener noreferrer">Polar SI9000e</a>.
-        </p>
-        <p>
-          The implementation is open source and inspectable.
         </p>
       </section>
 
@@ -66,7 +63,7 @@
         <p>
           This solver supports free-form geometries. These examples use that flexibility to calculate cable impedance from physical dimensions and dielectric properties.
         </p>
-        <p class="mb-4"><a href="./">Open the free-form stackup editor</a></p>
+        <p class="mb-4"><a href="./#mode=freeform">Open the free-form stackup editor</a></p>
 
         <div class="row row-cols-1 g-3 mt-1">
           <article class="col">
@@ -81,9 +78,6 @@
                   </h3>
                   <p class="card-text">
                     The <a href="https://catalog.belden.com/techdata/EN/9R28014_techdata.pdf" target="_blank" rel="noopener noreferrer">Belden 9R280 datasheet</a> specifies 28 AWG, 7x36 tinned-copper conductors on 1.27 mm pitch in a 0.914 mm body. A ground-signal-ground group is nominally 105 ohm.
-                  </p>
-                  <p class="card-text">
-                    The model uses equivalent-area 0.336 mm conductors in a rounded 0.914 mm PVC body, with <a href="https://www.matweb.com/search/datasheet.aspx?matguid=d43783c4603b449b90807908b8fdcea9" target="_blank" rel="noopener noreferrer">representative flexible PVC</a> at er = 2.89 and estimated tan(delta) = 0.048. It predicts the specified value to within 0.5%.
                   </p>
                   <p class="card-text mb-0">
                     <a href="./" data-freeform-example="ribbon-many-port">Open the 5-signal, 6-ground many-port ribbon example</a>
@@ -105,9 +99,6 @@
                   </h3>
                   <p class="card-text">
                     The <a href="https://catalog.belden.com/techdata/EN/1583ANS_techdata.pdf" target="_blank" rel="noopener noreferrer">Belden 1583ANS datasheet</a> specifies 24 AWG solid copper, a 0.89 mm PE-insulated diameter, and 100 ohm nominal impedance.
-                  </p>
-                  <p class="card-text">
-                    The model uses 0.511 mm copper conductors inside rounded 0.89 mm PE sleeves at the insulated-diameter spacing, with <a href="https://www.lyondellbasell.com/en/polymers/p/Alathon-M5370RF/065ea9ad-754f-4297-ab35-e1767f6f434b" target="_blank" rel="noopener noreferrer">representative PE</a> at er = 2.34 and estimated tan(delta) = 0.00002. It predicts the specified value to within 4.8%.
                   </p>
                 </div>
               </div>
@@ -134,17 +125,18 @@
 
       <section aria-labelledby="examples-heading">
         <h2 id="examples-heading">Example JLCPCB Four-Layer Stackups</h2>
+        <p>Click a diagram to open a trace tuned to 50 Ω with standard copper selections: 1 oz outside and 0.5 oz inside. These examples use nominal copper thicknesses and a 0.5 mil total etch reduction; the calculator solves them automatically.</p>
 
         <article class="about-example">
           <h3>JLC04161H-3313</h3>
           <p>1.56 mm finished thickness, +/- 10%. Uses 0.0994 mm 3313 RC57 prepreg above and below a 1.265 mm core.</p>
           <div class="about-stackup-previews">
-            <a class="about-stackup-preview" href="./#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=5.871&amp;t=1.6&amp;h=3.91339&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-3313 L1 outside microstrip example">
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=5.939376&amp;t=1.4&amp;h=3.91339&amp;etch_delta=0.5&amp;units=mm&amp;cseg=45&amp;dseg=45" aria-label="Open the JLC04161H-3313 L1 outside microstrip example">
               <svg viewBox="0 0 450 340" role="img" aria-label="JLC04161H-3313 L1 outside microstrip geometry">
                 <image href="./jlc-3313-l1-l2.svg" width="900" height="340" />
               </svg>
             </a>
-            <a class="about-stackup-preview" href="./#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=5.236&amp;t=0.598425&amp;h=49.8031&amp;h2=3.91339&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-3313 L2 stripline example">
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=5.112939&amp;t=0.7&amp;h=49.8031&amp;h2=3.91339&amp;etch_delta=0.5&amp;units=mm&amp;cseg=45&amp;dseg=45" aria-label="Open the JLC04161H-3313 L2 stripline example">
               <svg viewBox="450 0 450 340" role="img" aria-label="JLC04161H-3313 L2 stripline geometry">
                 <image href="./jlc-3313-l1-l2.svg" width="900" height="340" />
               </svg>
@@ -156,12 +148,12 @@
           <h3>JLC04161H-7628</h3>
           <p>1.59 mm finished thickness, +/- 10%. Uses 0.2104 mm 7628 RC49 prepreg above and below a 1.065 mm core.</p>
           <div class="about-stackup-previews">
-            <a class="about-stackup-preview" href="./#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=13.86&amp;t=1.6&amp;h=8.28346&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-7628 L1 outside microstrip example">
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=microstrip&amp;var=se&amp;mat=jlc-np155f&amp;w=13.973791&amp;t=1.4&amp;h=8.28346&amp;etch_delta=0.5&amp;units=mm&amp;cseg=45&amp;dseg=45" aria-label="Open the JLC04161H-7628 L1 outside microstrip example">
               <svg viewBox="0 0 450 340" role="img" aria-label="JLC04161H-7628 L1 outside microstrip geometry">
                 <image href="./jlc-7628-l1-l2.svg" width="900" height="340" />
               </svg>
             </a>
-            <a class="about-stackup-preview" href="./#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=11.01&amp;t=0.598425&amp;h=41.9291&amp;h2=8.28346&amp;etch_delta=0.7&amp;units=mm" aria-label="Open the JLC04161H-7628 L2 stripline example">
+            <a class="about-stackup-preview" href="./#v=3&amp;kind=stripline&amp;var=se&amp;mat=jlc-np155f&amp;w=10.873372&amp;t=0.7&amp;h=41.9291&amp;h2=8.28346&amp;etch_delta=0.5&amp;units=mm&amp;cseg=45&amp;dseg=45" aria-label="Open the JLC04161H-7628 L2 stripline example">
               <svg viewBox="450 0 450 340" role="img" aria-label="JLC04161H-7628 L2 stripline geometry">
                 <image href="./jlc-7628-l1-l2.svg" width="900" height="340" />
               </svg>

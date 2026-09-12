@@ -92,8 +92,8 @@
 void nmmtl_dump(FILE *dump_file,
 		int cntr_seg,
 		int pln_seg,
-		float coupling,
-		float risetime,
+		double coupling,
+		double risetime,
 		struct contour *signals,
 		int conductor_counter,
 		CONDUCTOR_DATA_P conductor_data,
@@ -104,7 +104,7 @@ void nmmtl_dump(FILE *dump_file,
   CELEMENTS_P ce;
   int cntr,i;
   
-  fprintf(dump_file,"%d %d %g %g\n",cntr_seg,pln_seg,
+  fprintf(dump_file,"%d %d %lg %lg\n",cntr_seg,pln_seg,
 	  coupling,risetime);
   
   for(;signals != NULL; signals = signals->next)
@@ -122,19 +122,19 @@ void nmmtl_dump(FILE *dump_file,
 	    conductor_data[cntr].node_end);
     for(ce = conductor_data[cntr].elements;ce != NULL;ce = ce->next)
     {
-      fprintf(dump_file,"%g ",ce->epsilon);
+      fprintf(dump_file,"%lg ",ce->epsilon);
       if(ce->edge[0]) fputs("1 ",dump_file);
       else fputs("0 ",dump_file);
       if(ce->edge[1]) fputs("1 ",dump_file);
       else fputs("0 ",dump_file);
-      if(ce->edge[0]) fprintf(dump_file,"%g %g ",ce->edge[0]->nu,
+      if(ce->edge[0]) fprintf(dump_file,"%lg %lg ",ce->edge[0]->nu,
 			      ce->edge[0]->free_space_nu);
-      if(ce->edge[1]) fprintf(dump_file,"%g %g ",ce->edge[1]->nu,
+      if(ce->edge[1]) fprintf(dump_file,"%lg %lg ",ce->edge[1]->nu,
 			      ce->edge[1]->free_space_nu);
       fputs("\n",dump_file);
       for(i = 0; i < 3; i++)
       {
-	fprintf(dump_file,"%d %-23.21g %-23.21g\n",ce->node[i],ce->xpts[i],ce->ypts[i]);
+	fprintf(dump_file,"%d %-23.21lg %-23.21lg\n",ce->node[i],ce->xpts[i],ce->ypts[i]);
       }
     }
     fputs(".\n",dump_file);
@@ -142,12 +142,12 @@ void nmmtl_dump(FILE *dump_file,
   
   for(; die_elements != NULL; die_elements = die_elements->next)
   {
-    fprintf(dump_file,"%g %g %g %g\n",
+    fprintf(dump_file,"%lg %lg %lg %lg\n",
 	    die_elements->epsilonplus,die_elements->epsilonminus,
 	    die_elements->normalx,die_elements->normaly);
     for(i = 0; i < 3; i++)
     {
-      fprintf(dump_file,"%d %-23.21g %-23.21g\n",die_elements->node[i],
+      fprintf(dump_file,"%d %-23.21lg %-23.21lg\n",die_elements->node[i],
 	      die_elements->xpts[i],die_elements->ypts[i]);
     }
   }

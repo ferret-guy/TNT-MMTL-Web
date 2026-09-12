@@ -104,6 +104,8 @@ export interface PresetParams {
   /** solver discretization + line params */
   cseg: number;
   dseg: number;
+  /** Refined single microstrip mesh/domain; opt-in because solves can take minutes. */
+  highAccuracy?: boolean;
   couplingLengthM: number;
   riseTimePs: number;
 }
@@ -214,7 +216,7 @@ function trace(
 function marginFor(p: PresetParams, kind: PresetKind, variant: PresetVariant): number {
   const span = variant === 'diff' ? 2 * p.w + p.s : p.w;
   const hTotal = kind === 'stripline' ? p.h + p.t + p.h2 : p.h + p.t;
-  return Math.max(3 * hTotal, 3 * span);
+  return Math.max(3 * hTotal, 3 * span) * (p.highAccuracy && kind === 'microstrip' && variant === 'se' ? 8 : 1);
 }
 
 export function buildPreset(
@@ -437,5 +439,11 @@ export function buildPreset(
     riseTimePs: p.riseTimePs,
     cseg: p.cseg,
     dseg: p.dseg,
+    ...(p.highAccuracy && kind === 'microstrip' && variant === 'se' ? {
+      polygonEdgeSegments: [
+        Math.max(2, Math.round(p.cseg * 0.1)), Math.max(2, Math.round(p.cseg * 0.4)),
+        Math.max(2, Math.round(p.cseg * 0.1)), Math.max(2, Math.round(p.cseg * 0.4)),
+      ] as [number, number, number, number],
+    } : {}),
   };
 }

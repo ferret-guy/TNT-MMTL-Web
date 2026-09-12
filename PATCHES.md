@@ -79,5 +79,51 @@ history.
 segment/intersection state used to bisect native-vs-wasm divergences
 (see build/repro/trace*.sh). Not compiled into production builds.
 
-The FORTRAN `.F` files are consumed as-is (translated by `f2c -R` at build
-time; see `toolchain/`).
+## Numerical recipe v1 (local integration)
+
+The shared solver now uses double precision through geometry, matrix assembly,
+linear algebra, and Fortran callbacks. The Fortran sources are translated with
+`f2c -r8 -R`; the gfortran reference uses `-fdefault-real-8 -fdefault-double-8`.
+All three build scripts rebuild every object, including when only a header has
+changed. Double builds have separate intermediate directories. Rebuilds record
+source/asset hashes in `public/wasm/build-info.json` and update the paired browser
+asset revision automatically.
+
+The integration includes accurate 24-point Gauss-Legendre quadrature, fourth-order
+panel grading for straight conductor and dielectric segments, geometric element
+midpoints, local-coordinate self-integrals/Jacobians, and the corrected second
+endpoint exponent. Straight dielectric self-panels use their analytically zero
+direct normal kernel; the image term is retained. This is appropriate for the
+solver's straight dielectric panels, including polygonal approximations to
+circular insulation, and is not a curved dielectric-panel formula.
+
+Accurate pi and a 1e-12 angular tolerance protect material classification near
+straight intersections. Vacuum constants consistently use c=299792458 m/s and
+the conventional mu0=4*pi*1e-7 H/m, including the JavaScript explicit-reference
+adapter used by arbitrary-object and floating-pair modes. Matrix, impedance,
+effective-permittivity, odd/even, propagation, and crosstalk result values retain
+17 significant digits. JavaScript current/field Jacobians and endpoint distances
+also use local differences on tiny graded panels.
+
+These shared corrections apply to every guided and free-form mode. The optional
+cross-section header `set EDGE_SEGMENTS n0 n1 n2 n3` supplies validated per-edge
+counts (2..1000) to four-edge polygons. It replaces the candidate's hard-coded
+`/work/case.mesh` file. Other polygons reject this option; without it they retain
+automatic edge allocation. Rectangle and circle primitives retain their own
+geometry-appropriate allocation. Auxiliary mesh refinement scales explicit edge
+counts as well as CSEG.
+
+The guided single-microstrip Advanced panel offers **Refined mesh and wider
+domain**: it starts CSEG/DSEG at 400, uses polygon edge fractions 0.1/0.4/0.1/0.4,
+and multiplies the lateral margin by eight. It is optional and saved in links.
+The interactive default remains 45 segments. Other modes can adjust their mesh
+density without being assigned a four-edge recipe. The single-microstrip recipe's
+sampled convergence evidence is not a certification of arbitrary geometries,
+other trace families, or the different loss post-processing used by this app.
+
+The original handoff patch had a malformed hunk and selected quadrature 32 even
+though its selected recipe specified 24. Integration used the hash-verified source
+snapshot, retained the standard `float.h` headers, and completed the constant and
+output-precision changes. Historical vendor goldens remain unchanged: intentional
+model/numerical changes should be evaluated using independent physics checks and
+matched native/WASM comparisons, not by rewriting historical results blindly.

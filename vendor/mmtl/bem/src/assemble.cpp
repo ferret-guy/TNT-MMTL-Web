@@ -77,7 +77,7 @@
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
   DELEMENTS_P die_elements,          - all die element data
   double length_scale,                - a scale factor based on element length
-  float **assemble_matrix            - out: resultant assemble matrix
+  double **assemble_matrix            - out: resultant assemble matrix
   
   RETURN VALUE:
   
@@ -93,8 +93,8 @@
 void nmmtl_assemble(int conductor_counter,
 		    CONDUCTOR_DATA_P conductor_data,
 		    DELEMENTS_P die_elements,
-		    float length_scale,
-		    float **assemble_matrix)
+		    double length_scale,
+		    double **assemble_matrix)
 {
   
   int i,j,cond_num,inner_cond_num;
@@ -106,7 +106,7 @@ void nmmtl_assemble(int conductor_counter,
 	double value[INTERP_PTS];
 	double Jacobian;
 	double coef1,coef2;
-  float nu0,nu1;
+  double nu0,nu1;
   
   /* matrix should be zeroed */
   

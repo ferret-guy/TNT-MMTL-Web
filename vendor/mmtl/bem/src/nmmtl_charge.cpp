@@ -70,11 +70,11 @@
   
   FORMAL PARAMETERS:
   
-  float *sigma_vector                - vector of charge distributions over 
+  double *sigma_vector                - vector of charge distributions over 
   conductors
   int conductor_counter,             - how many conductors
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
-  float *electrostatic_induction,    - out: results (almost capacitance)
+  double *electrostatic_induction,    - out: results (almost capacitance)
   single row of matrix
   
   
@@ -89,10 +89,10 @@
   
   */
 
-void nmmtl_charge(float *sigma_vector,
+void nmmtl_charge(double *sigma_vector,
 		  int conductor_counter,
 		  CONDUCTOR_DATA_P conductor_data,
-		  float *electrostatic_induction)
+		  double *electrostatic_induction)
 {
   int cond_num;
   CELEMENTS_P cel;
@@ -100,7 +100,7 @@ void nmmtl_charge(float *sigma_vector,
   double Jacobian;
   int i;
   double shape[INTERP_PTS];
-  float nu0,nu1;
+  double nu0,nu1;
   
   for(cond_num = 1;cond_num <= conductor_counter; cond_num++)
   {
@@ -158,11 +158,11 @@ void nmmtl_charge(float *sigma_vector,
   
   FORMAL PARAMETERS:
   
-  float *sigma_vector                - vector of charge distributions over 
+  double *sigma_vector                - vector of charge distributions over 
   conductors
   int conductor_counter,             - how many conductors
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
-  float *electrostatic_induction,    - out: results (almost capacitance)
+  double *electrostatic_induction,    - out: results (almost capacitance)
   single row of matrix
   
   
@@ -177,10 +177,10 @@ void nmmtl_charge(float *sigma_vector,
   
   */
 
-void nmmtl_charge_free_space(float *sigma_vector,
+void nmmtl_charge_free_space(double *sigma_vector,
 			     int conductor_counter,
 			     CONDUCTOR_DATA_P conductor_data,
-			     float *electrostatic_induction)
+			     double *electrostatic_induction)
 {
   int cond_num;
   CELEMENTS_P cel;
@@ -188,7 +188,7 @@ void nmmtl_charge_free_space(float *sigma_vector,
   double Jacobian;
   int i;
 	double shape[INTERP_PTS];
-  float nu0,nu1;
+  double nu0,nu1;
   
   for(cond_num = 1;cond_num <= conductor_counter; cond_num++)
   {

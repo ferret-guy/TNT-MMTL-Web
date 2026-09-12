@@ -5,8 +5,8 @@
 
 typedef struct 
 {
-  float real;                    /* the real part of the complex number */
-  float imaginary;		/* the imaginary part of hte complex number */
+  double real;                    /* the real part of the complex number */
+  double imaginary;		/* the imaginary part of hte complex number */
 } COMPLEX;
 
 typedef struct
@@ -39,7 +39,7 @@ COMPLEX cdiv(COMPLEX,COMPLEX);
 COMPLEX cmult(COMPLEX,COMPLEX);
 
 /* find the absolute value of a complex number */
-float cmag(COMPLEX);
+double cmag(COMPLEX);
 
 /* find the complex conjagate of a complex number */
 COMPLEX conj(COMPLEX);

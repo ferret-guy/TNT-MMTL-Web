@@ -75,7 +75,7 @@ void nmmtl_write_plot_data(
 			   int conductor_counter,
 			   DELEMENTS_P die_elements,
 			   CONDUCTOR_DATA_P conductor_data,
-			   float *sigma_vector,
+			   double *sigma_vector,
 			   FILE *outputFile
 			 )
 {
@@ -96,28 +96,28 @@ void nmmtl_write_plot_data(
 	  
 	  fprintf(outputFile,"X Points:");
 	  for (i = 0; i < INTERP_PTS; i++)
-	    fprintf(outputFile," %e",cel->xpts[i]);
+	    fprintf(outputFile," %.17le",cel->xpts[i]);
 	  fprintf(outputFile,"\n");
 	  
 	  fprintf(outputFile,"Y Points:");
 	  for (i = 0; i < INTERP_PTS; i++)
-	    fprintf(outputFile," %e",cel->ypts[i]);
+	    fprintf(outputFile," %.17le",cel->ypts[i]);
 	  fprintf(outputFile,"\n");
 	  
 	  if (cel->edge[0])
 	    {
-	      fprintf(outputFile,"Edge: 0 %e\n",cel->edge[0]->nu);
+	      fprintf(outputFile,"Edge: 0 %.17le\n",cel->edge[0]->nu);
 	    }
 	  if (cel->edge[1])
 	    {
-	      fprintf(outputFile,"Edge: 1 %e\n",cel->edge[1]->nu);
+	      fprintf(outputFile,"Edge: 1 %.17le\n",cel->edge[1]->nu);
 	    }
 	  /* tnt-web addition: expose the contacting dielectric constant so the
 	     web field renderer (and geometry debugging) can see it */
-	  fprintf(outputFile,"Epsilon: %e\n",cel->epsilon);
+	  fprintf(outputFile,"Epsilon: %.17le\n",cel->epsilon);
 	  fprintf(outputFile,"Charge Values:");
 	  for (i = 0; i < INTERP_PTS; i++)
-	    fprintf(outputFile," %e",sigma_vector[cel->node[i]]);
+	    fprintf(outputFile," %.17le",sigma_vector[cel->node[i]]);
 	  fprintf(outputFile,"\n");
 	  fprintf(outputFile,"\n");
 	  
@@ -131,21 +131,21 @@ void nmmtl_write_plot_data(
       fprintf(outputFile,"Element Type: Dielectric\n");
       fprintf(outputFile,"X Points:");
       for (i = 0; i < INTERP_PTS; i++)
-	fprintf(outputFile," %e",die->xpts[i]);
+	fprintf(outputFile," %.17le",die->xpts[i]);
       fprintf(outputFile,"\n");
 
       fprintf(outputFile,"Y Points:");
       for (i = 0; i < INTERP_PTS; i++)
-	fprintf(outputFile," %e",die->ypts[i]);
+	fprintf(outputFile," %.17le",die->ypts[i]);
       fprintf(outputFile,"\n");
 
       fprintf(outputFile,"Charge Values:");
       for (i = 0; i < INTERP_PTS; i++)
-	fprintf(outputFile," %e",sigma_vector[die->node[i]]);
+	fprintf(outputFile," %.17le",sigma_vector[die->node[i]]);
       fprintf(outputFile,"\n");
 
       /* tnt-web addition: interface dielectric constants (normal side +) */
-      fprintf(outputFile,"EpsilonPM: %e %e\n",die->epsilonplus,die->epsilonminus);
+      fprintf(outputFile,"EpsilonPM: %.17le %.17le\n",die->epsilonplus,die->epsilonminus);
 
       fprintf(outputFile,"\n");
 

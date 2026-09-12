@@ -76,14 +76,14 @@ extern FILE *dump_file;
   
   int cntr_seg
   int pln_seg
-  float coupling
-  float risetime
-  float conductivity
-  float frequency
-  float half_minimum_dimension
+  double coupling
+  double risetime
+  double conductivity
+  double frequency
+  double half_minimum_dimension
   int gnd_planes
-  float top_ground_plane_thickness
-  float bottom_ground_plane_thickness
+  double top_ground_plane_thickness
+  double bottom_ground_plane_thickness
   struct dielectric *dielectrics
   struct contour *signals
   struct contour *groundwires
@@ -93,27 +93,27 @@ extern FILE *dump_file;
 
 
 void nmmtl_dump_geometry(int cntr_seg,int pln_seg,
-			 float coupling,float risetime,
-			 float the_conductivity,float frequency,
-			 float half_minimum_dimension,
+			 double coupling,double risetime,
+			 double the_conductivity,double frequency,
+			 double half_minimum_dimension,
 			 int gnd_planes,
-			 float top_ground_plane_thickness,
-			 float bottom_ground_plane_thickness,
+			 double top_ground_plane_thickness,
+			 double bottom_ground_plane_thickness,
 			 struct dielectric *dielectrics,
 			 struct contour *signals,
 			 struct contour *groundwires)
 {
   struct contour *last;
-  float conductivity = the_conductivity;
+  double conductivity = the_conductivity;
 
   fprintf(dump_file,"\n\n\t\tDUMP OF GEOMETRY\n\n");
   fprintf(dump_file,
-	  "cntr_seg=%d, pln_seg=%d, coupling=%g, risetime=%g\n",
+	  "cntr_seg=%d, pln_seg=%d, coupling=%lg, risetime=%lg\n",
 	  cntr_seg,pln_seg,coupling,risetime);
-  fprintf(dump_file,"conductivity=%g, frequency=%g, half min dim=%g\n",
+  fprintf(dump_file,"conductivity=%lg, frequency=%lg, half min dim=%lg\n",
 	  conductivity,frequency,half_minimum_dimension);
   fprintf(dump_file,
-	  "%d ground planes, top thickness=%g, bottom thickness=%g\n\n",
+	  "%d ground planes, top thickness=%lg, bottom thickness=%lg\n\n",
 	  gnd_planes,top_ground_plane_thickness,bottom_ground_plane_thickness);
   
   fprintf(dump_file,"SIGNAL CONDUCTORS:\n\n");
@@ -163,10 +163,10 @@ void nmmtl_dump_geometry(int cntr_seg,int pln_seg,
   fprintf(dump_file,"DIELECTRICS:\n\n");
   for (struct dielectric *die = dielectrics; die != NULL; die = die->next)
   {
-    fprintf(dump_file,"\tlow left = (%g,%g), up right = (%g,%g)\n",
+    fprintf(dump_file,"\tlow left = (%lg,%lg), up right = (%lg,%lg)\n",
 	    die->x0,
 	    die->y0,die->x1,die->y1);
-    fprintf(dump_file,"\tconstant=%g, tangent=%g\n\n",die->constant,
+    fprintf(dump_file,"\tconstant=%lg, tangent=%lg\n\n",die->constant,
 	    die->tangent);
   }
   fprintf(dump_file,"\n");
@@ -204,12 +204,12 @@ void nmmtl_dump_polygon(CONTOURS_P contour)
   
   fprintf(dump_file,
 	  "%c %s %s\n",contour->primitive,contour->name,"polygon");
-  fprintf(dump_file,"\tlowest y = %g, highest y = %g, perimeter = %g\n",
+  fprintf(dump_file,"\tlowest y = %lg, highest y = %lg, perimeter = %lg\n",
 	  contour->y0,contour->y1,contour->x0);
   fprintf(dump_file,"\tpoints:\n");
   for(pp=contour->points;pp != NULL; pp = pp->next)
   {
-    fprintf(dump_file,"\t\t%g,%g\n",pp->x,pp->y);
+    fprintf(dump_file,"\t\t%lg,%lg\n",pp->x,pp->y);
   }
 }
 
@@ -244,7 +244,7 @@ void nmmtl_dump_rectangle(CONTOURS_P contour)
   fprintf(dump_file,"%c %s %s\n",contour->primitive,contour->name,
 	  "rectangle");
   fprintf(dump_file,
-	  "\tlow left = (%g,%g), up right = (%g,%g)\n",contour->x0,
+	  "\tlow left = (%lg,%lg), up right = (%lg,%lg)\n",contour->x0,
 	  contour->y0,contour->x1,contour->y1);
 }
 
@@ -278,7 +278,7 @@ void nmmtl_dump_circle(CONTOURS_P contour)
   
   fprintf(dump_file,"%c %s %s\n",contour->primitive,
 	  contour->name,"circle");
-  fprintf(dump_file,"\tcenter=(%g,%g), radius=%g\n",contour->x0,
+  fprintf(dump_file,"\tcenter=(%lg,%lg), radius=%lg\n",contour->x0,
 	  contour->y0,contour->x1);
 }
 

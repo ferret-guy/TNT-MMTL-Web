@@ -48,13 +48,13 @@
 
 
 
- float *c_calc_eigenvalues_ai = NULL; /* workspace matricies */
- float *c_calc_eigenvalues_ar = NULL;
- float *c_calc_eigenvalues_wr = NULL;
- float *c_calc_eigenvalues_wi = NULL;
- float *c_calc_eigenvalues_zi = NULL;
- float *c_calc_eigenvalues_zr = NULL;
- float *c_calc_eigenvalues_temp = NULL;
+ double *c_calc_eigenvalues_ai = NULL; /* workspace matricies */
+ double *c_calc_eigenvalues_ar = NULL;
+ double *c_calc_eigenvalues_wr = NULL;
+ double *c_calc_eigenvalues_wi = NULL;
+ double *c_calc_eigenvalues_zi = NULL;
+ double *c_calc_eigenvalues_zr = NULL;
+ double *c_calc_eigenvalues_temp = NULL;
  int n_c_calc_eigenvalues = 0;
  int n_c_init_calc_eigenvalues = 0;
 
@@ -66,7 +66,7 @@
  int n_invert_matrix = 0;
  int n_init_invert_matrix = 0;
  int *invert_matrix_ipvt = NULL;
- float *invert_matrix_wrk = NULL;
+ double *invert_matrix_wrk = NULL;
  double *d_invert_matrix_wrk = NULL;
 
  int n_c_solve_linear = 0;
@@ -90,8 +90,8 @@
 //  int n_init_solve_nonlinear = 0;
 // 
 //  int *solve_nonlinear_iwk;
-//  float *solve_nonlinear_wrk = NULL;
-//  float *solve_nonlinear_x = NULL;
+//  double *solve_nonlinear_wrk = NULL;
+//  double *solve_nonlinear_x = NULL;
 
      
 /* ***********************************************************************
@@ -313,13 +313,13 @@ void c_set_calc_eigenvalues(int *n)
 void c_init_calc_eigenvalues(int *status)
 {
 
-  extern float *c_calc_eigenvalues_ai; /* workspace matricies */
-  extern float *c_calc_eigenvalues_ar;
-  extern float *c_calc_eigenvalues_wr;
-  extern float *c_calc_eigenvalues_wi;
-  extern float *c_calc_eigenvalues_zi;
-  extern float *c_calc_eigenvalues_zr;
-  extern float *c_calc_eigenvalues_temp;
+  extern double *c_calc_eigenvalues_ai; /* workspace matricies */
+  extern double *c_calc_eigenvalues_ar;
+  extern double *c_calc_eigenvalues_wr;
+  extern double *c_calc_eigenvalues_wi;
+  extern double *c_calc_eigenvalues_zi;
+  extern double *c_calc_eigenvalues_zr;
+  extern double *c_calc_eigenvalues_temp;
 
   extern int n_c_calc_eigenvalues;
   extern int n_c_init_calc_eigenvalues;
@@ -340,13 +340,13 @@ void c_init_calc_eigenvalues(int *status)
     }
 
   n = n_c_calc_eigenvalues;
-  c_calc_eigenvalues_ai = (float *)calloc(n*n,sizeof(float));
-  c_calc_eigenvalues_ar = (float *)calloc(n*n,sizeof(float));
-  c_calc_eigenvalues_wi = (float *)calloc(n*n,sizeof(float));
-  c_calc_eigenvalues_wr = (float *)calloc(n*n,sizeof(float));
-  c_calc_eigenvalues_zi = (float *)calloc(n*n,sizeof(float));
-  c_calc_eigenvalues_zr = (float *)calloc(n*n,sizeof(float));
-  c_calc_eigenvalues_temp = (float *)calloc(3*n,sizeof(float));
+  c_calc_eigenvalues_ai = (double *)calloc(n*n,sizeof(double));
+  c_calc_eigenvalues_ar = (double *)calloc(n*n,sizeof(double));
+  c_calc_eigenvalues_wi = (double *)calloc(n*n,sizeof(double));
+  c_calc_eigenvalues_wr = (double *)calloc(n*n,sizeof(double));
+  c_calc_eigenvalues_zi = (double *)calloc(n*n,sizeof(double));
+  c_calc_eigenvalues_zr = (double *)calloc(n*n,sizeof(double));
+  c_calc_eigenvalues_temp = (double *)calloc(3*n,sizeof(double));
 
   (*status) = SUCCESS;
   return;
@@ -404,13 +404,13 @@ void c_init_calc_eigenvalues(int *status)
 *  matrix
 */
 //  {
-//    extern float *c_calc_eigenvalues_ai; /* workspace matricies */
-//    extern float *c_calc_eigenvalues_ar;
-//    extern float *c_calc_eigenvalues_wr;
-//    extern float *c_calc_eigenvalues_wi;
-//    extern float *c_calc_eigenvalues_zi;
-//    extern float *c_calc_eigenvalues_zr;
-//    extern float *c_calc_eigenvalues_temp;
+//    extern double *c_calc_eigenvalues_ai; /* workspace matricies */
+//    extern double *c_calc_eigenvalues_ar;
+//    extern double *c_calc_eigenvalues_wr;
+//    extern double *c_calc_eigenvalues_wi;
+//    extern double *c_calc_eigenvalues_zi;
+//    extern double *c_calc_eigenvalues_zr;
+//    extern double *c_calc_eigenvalues_temp;
 
 //    extern int n_c_init_calc_eigenvalues;
 
@@ -544,11 +544,11 @@ void c_mult_matricies(int *ra,int *carb, int *cb,
  *    lda           number of rows in a (when dimensioned)
  *    ldb           number of rows in b (when dimensioned)
  *    ldc           number of rows in c (when dimensioned)
- *    a             float input matrix 
- *    b             float input matrix 
+ *    a             double input matrix 
+ *    b             double input matrix 
  *          
  * OUTPUTS  
- *    c             float output matrix
+ *    c             double output matrix
  *          
  *         
  * FUNCTIONS CALLED 
@@ -568,7 +568,7 @@ void c_mult_matricies(int *ra,int *carb, int *cb,
 /* this routine will multiply two matricies */
 
 void mult_matricies(int *ra,int *carb, int *cb,
-			   float *a, float *b, float *c,
+			   double *a, double *b, double *c,
 			   int *lda, int *ldb, int *ldc,int *status)
      
 {
@@ -858,7 +858,7 @@ void init_invert_matrix(int *status)
 {
 
   extern int *invert_matrix_ipvt;
-  extern float *invert_matrix_wrk;
+  extern double *invert_matrix_wrk;
 
   extern int n_invert_matrix;
   extern int n_init_invert_matrix;
@@ -875,7 +875,7 @@ void init_invert_matrix(int *status)
 
 /* malloc some workspace */  
   invert_matrix_ipvt = (int *)calloc(n,sizeof(int));
-  invert_matrix_wrk = (float *)calloc(n*n,sizeof(float));
+  invert_matrix_wrk = (double *)calloc(n*n,sizeof(double));
 
   (*status) = SUCCESS;
   return;
@@ -920,17 +920,17 @@ void init_invert_matrix(int *status)
 
 /* this routine will invert a single precision real matrix */
 
-void invert_matrix(int *n,float *a,float *b,
+void invert_matrix(int *n,double *a,double *b,
 		   int *lda, int *ldb, int *status)
      
 {
   extern int *invert_matrix_ipvt;
-  extern float *invert_matrix_wrk;
+  extern double *invert_matrix_wrk;
 
   extern int n_init_invert_matrix;
 
-  float t1[2];           /* workspace matricies */
-  float rcond;            /* value indicating condition of input matrix */
+  double t1[2];           /* workspace matricies */
+  double rcond;            /* value indicating condition of input matrix */
   int ierr;             /*status flag for call */
   int i,j;                 /*loop variable */
   int calc_inv = 0;       /* indicates inverse of is to be calculated */
@@ -1013,16 +1013,16 @@ void invert_matrix(int *n,float *a,float *b,
 
 /* this routine will invert a single precision real matrix */
 
-void invert_matrix_cond(int *n,float *a,float *b,
-		   int *lda, int *ldb, float *rcond, int *status)
+void invert_matrix_cond(int *n,double *a,double *b,
+		   int *lda, int *ldb, double *rcond, int *status)
      
 {
   extern int *invert_matrix_ipvt;
-  extern float *invert_matrix_wrk;
+  extern double *invert_matrix_wrk;
 
   extern int n_init_invert_matrix;
 
-  float t1[2];           /* workspace matricies */
+  double t1[2];           /* workspace matricies */
   int ierr;             /*status flag for call */
   int i,j;                 /*loop variable */
   int calc_inv = 0;       /* indicates inverse of is to be calculated */
@@ -1716,8 +1716,8 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
 // void init_solve_nonlinear(int *status)
 // {
 //   extern int *solve_nonlinear_iwk;
-//   extern float *solve_nonlinear_wrk;
-//   extern float *solve_nonlinear_x;
+//   extern double *solve_nonlinear_wrk;
+//   extern double *solve_nonlinear_x;
 // 
 //   
 //   extern int n_init_solve_nonlinear;
@@ -1740,9 +1740,9 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
 // 
 //   m_solve_nonlinear = m = (int ) (ceil(n*(n+1)/2.0) + n*n +7*n) ;
 // 
-//   solve_nonlinear_wrk = (float *)calloc(m,sizeof(float));
+//   solve_nonlinear_wrk = (double *)calloc(m,sizeof(double));
 //   solve_nonlinear_iwk = (int *)calloc(n,sizeof(int));
-//   solve_nonlinear_x = (float *)calloc(n,sizeof(float));
+//   solve_nonlinear_x = (double *)calloc(n,sizeof(double));
 // 
 //   (*status) = SUCCESS;
 //   return;
@@ -1766,13 +1766,13 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
  *                                will evaluate the system of equations
  *                                see page 137 of NSWC
  *     int n;                   the size of the system of equation
- *     float *x                 the initial guess for the solution
- *     float EPS                a statement of the relitive accuracy of (*f)()
- *     float TOL                the desired accuracy of the soln
+ *     double *x                 the initial guess for the solution
+ *     double EPS                a statement of the relitive accuracy of (*f)()
+ *     double TOL                the desired accuracy of the soln
  *                                s/b less than 1.0e-5
  * OUTPUTS
- *    float *x                 the final solution  
- *    float *fvec              a pointer to a vector that represents
+ *    double *x                 the final solution  
+ *    double *fvec              a pointer to a vector that represents
  *                                what (*f)() evaluates to at the final 
  *                                solution
  *         
@@ -1789,13 +1789,13 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
  * ***********************************************************************
  */
 // 
-// void solve_nonlinear(void (*f)(),void (*f2)(), int *n,float *eps,float *tol,
-// 		     float *x, float *fvec, int *status)
+// void solve_nonlinear(void (*f)(),void (*f2)(), int *n,double *eps,double *tol,
+// 		     double *x, double *fvec, int *status)
 //      
 // {
-//   extern float *solve_nonlinear_wrk;
+//   extern double *solve_nonlinear_wrk;
 //   extern int *solve_nonlinear_iwk;
-//   extern float *solve_nonlinear_x;
+//   extern double *solve_nonlinear_x;
 //   extern int n_init_solve_nonlinear;
 //   int info = 0;
 //   int i;
@@ -1803,13 +1803,13 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
 //   int mode = 1;
 //   int maxfev = 200;
 //   int ml_mu;
-//   float factor = 100.0;
-//   float gtol = 0.0;
+//   double factor = 100.0;
+//   double gtol = 0.0;
 //   int nprint = 0;
 //   int nfev = 0;
 //   int lr;
-//   float sum;
-//   float *m1,*m2,*m3,*m4,*m5,*m6,*m7,*mm;
+//   double sum;
+//   double *m1,*m2,*m3,*m4,*m5,*m6,*m7,*mm;
 //   
 //   ml_mu = (*n) -1;
 // 
@@ -1887,12 +1887,12 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
  * 
  * INPUTS  
  *    int *n;               the order of matrix a
- *    float *a;             the matrix to be factored
+ *    double *a;             the matrix to be factored
  *    int *lda;             leading dimension of a
  *          
  * OUTPUTS  
  *    int *ipvt;	    integer vector of pivot indices
- *    float *lu;	    factorization of A (= L*U)
+ *    double *lu;	    factorization of A (= L*U)
  *                          if a is not needed, pass a or NULL for lu
  *    int     *status;      SUCCESS or FAIL
  *          
@@ -1904,7 +1904,7 @@ void d_c_solve_linear(int *n,DOUBLE_COMPLEX *a,DOUBLE_COMPLEX *b,
  * ***********************************************************************
  */
 
-void lu_factor(int *n, float *a, float *lu, int *lda, 
+void lu_factor(int *n, double *a, double *lu, int *lda, 
 		 int *ipvt, int *status)
 {
     int i,j;	/* loop indices */
@@ -1960,14 +1960,14 @@ void lu_factor(int *n, float *a, float *lu, int *lda,
  * 
  * INPUTS  
  *    int *n;               the order of matrix a
- *    float *a;             the matrix to be factored
+ *    double *a;             the matrix to be factored
  *    int *lda;             leading dimension of a
  *          
  * OUTPUTS  
  *    int *ipvt;	    integer vector of pivot indices
- *    float *lu;	    factorization of A (= L*U)
+ *    double *lu;	    factorization of A (= L*U)
  *                          if a is not needed, pass a or NULL for lu
- *    float *rcond          condition number
+ *    double *rcond          condition number
  *    int *status;      SUCCESS or LUFACTCN
  *          
  * FUNCTIONS CALLED 
@@ -1978,13 +1978,13 @@ void lu_factor(int *n, float *a, float *lu, int *lda,
  * ***********************************************************************
  */
 
-void lu_factor_cond(int *n, float *a, float *lu, int *lda, 
-		 int *ipvt, float *rcond, int *status)
+void lu_factor_cond(int *n, double *a, double *lu, int *lda, 
+		 int *ipvt, double *rcond, int *status)
 {
     int i,j;	           /* loop indices */
     static int *z;         /* workspace vector */
     static int old_n = 0;  /* previous value of n used to size z */
-    float check;           /* used for doing a check of rcond */
+    double check;           /* used for doing a check of rcond */
     double condition;      /* used to pass rcond to message */
     
         
@@ -2031,7 +2031,7 @@ void lu_factor_cond(int *n, float *a, float *lu, int *lda,
     {
       (*status) = FAIL ;
       condition = *rcond;
-      fprintf(stderr,"ELECTRO-E-LUFACTCN LU factorization shows matrix is singular, condition number %e\n",condition);
+      fprintf(stderr,"ELECTRO-E-LUFACTCN LU factorization shows matrix is singular, condition number %le\n",condition);
       return;
     }
 
@@ -2122,13 +2122,13 @@ void dlu_factor(int *n, double *a, double *lu, int *lda,
  * 
  * INPUTS  
  *    int *n;               the order of matrix a
- *    float *a;             lu factored matrix output from lu_factor
- *    float *b;             right hand side vector (a*x=b)
+ *    double *a;             lu factored matrix output from lu_factor
+ *    double *b;             right hand side vector (a*x=b)
  *    int *lda;             leading dimension of matrix
  *    int *ipvt;	    integer vector of pivot indices from lu_factor
  *          
  * OUTPUTS  
- *    float *x;		    the solution vector 
+ *    double *x;		    the solution vector 
  *                          if b is not needed, pass b or NULL in for x
  *    int     *status;      SUCCESS
  *          
@@ -2141,7 +2141,7 @@ void dlu_factor(int *n, double *a, double *lu, int *lda,
  */
 
 
-void lu_solve_linear(int *n, float *a, float *x, float *b, int *lda, 
+void lu_solve_linear(int *n, double *a, double *x, double *b, int *lda, 
 		     int *ipvt, int *status)
 {
     int i;	/* loop indices */

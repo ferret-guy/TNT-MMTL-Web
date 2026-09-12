@@ -555,10 +555,10 @@ struct y
     if(overlap)
     {
       if(overlap_left != expected[loop].lo)
-	printf("  overlap_left  failed,  wanted: %f, got: %f\n",
+	printf("  overlap_left  failed,  wanted: %lf, got: %lf\n",
 	       expected[loop].ol,overlap_left);
       if(overlap_right != expected[loop].ro)
-	printf("  overlap_right failed,  wanted: %f, got: %f\n",
+	printf("  overlap_right failed,  wanted: %lf, got: %lf\n",
 	       expected[loop].or,overlap_right);
       if(left_overhang != expected[loop].ol)
 	printf("  left_overhang failed,  wanted: %d, got: %d\n",

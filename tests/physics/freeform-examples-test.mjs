@@ -212,7 +212,7 @@ test('About-page cable cards link their titles and publish solved benchmark accu
   );
   assert.match(aboutHtml, /estimated tan\(delta\) = 0\.048/);
   assert.match(aboutHtml, /estimated tan\(delta\) = 0\.00002/);
-  assert.match(aboutHtml, /specified value to within 0\.5%/);
+  assert.match(aboutHtml, /specified value to within 0\.7%/);
   assert.match(aboutHtml, /specified value to within 4\.8%/);
 });
 
@@ -323,12 +323,12 @@ test('native BEM ribbon example is near the published 105 ohm benchmark', async 
   const result = await solveExample(RIBBON_CABLE_EXAMPLE_STATE);
   assert.equal(result.nSignals, 1);
   assert.ok(
-    result.z0[0] >= 104.4 && result.z0[0] <= 104.6,
+    result.z0[0] >= 104.3 && result.z0[0] <= 104.45,
     `ribbon Z0=${result.z0[0]} ohm`,
   );
   const benchmark = FREEFORM_EXAMPLES_BY_ID.ribbon.benchmark.ohms;
   assert.equal(benchmark, 105);
-  assert.equal((Math.abs(result.z0[0] - benchmark) / benchmark * 100).toFixed(1), '0.5');
+  assert.equal((Math.abs(result.z0[0] - benchmark) / benchmark * 100).toFixed(1), '0.6');
 });
 
 test('native BEM Cat5e example is a 100 ohm differential pair', async () => {
@@ -342,5 +342,5 @@ test('native BEM Cat5e example is a 100 ohm differential pair', async () => {
   );
   const benchmark = FREEFORM_EXAMPLES_BY_ID.cat5.benchmark.ohms;
   assert.equal(benchmark, 100);
-  assert.equal((Math.abs(differentialOhms - benchmark) / benchmark * 100).toFixed(1), '4.8');
+  assert.equal((Math.abs(differentialOhms - benchmark) / benchmark * 100).toFixed(1), '4.7');
 });

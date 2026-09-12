@@ -13,8 +13,8 @@
  * 									    *
  *   INPUT PARAMETERS							    *
  *	FILE *output_fp;		output file ptr			    *
- *	float **electrostatic_induction;[B] matrix			    *
- *	float **inductance;		[L] matrix			    *
+ *	double **electrostatic_induction;[B] matrix			    *
+ *	double **inductance;		[L] matrix			    *
  *	struct contour *signals;	signal line info (names)	    *
  * 									    *
  *   OUTPUT PARAMETERS							    *
@@ -31,8 +31,8 @@
 
 #include "nmmtl.h"
 
-void nmmtl_output_matrices(FILE *output_fp, float **electrostatic_induction,
-			   float **inductance, struct contour *signals)
+void nmmtl_output_matrices(FILE *output_fp, double **electrostatic_induction,
+			   double **inductance, struct contour *signals)
 {
   struct contour *sig_line1, *sig_line2;    /* signal ptrs */
   int i,j;				    /* array indices */
@@ -52,7 +52,7 @@ void nmmtl_output_matrices(FILE *output_fp, float **electrostatic_induction,
 	 sig_line2 != NULL;
 	 sig_line2 = sig_line2->next, j++)
     {
-      fprintf(output_fp, "B( ::%s , ::%s )= %15.7e\n",
+      fprintf(output_fp, "B( ::%s , ::%s )= %24.16le\n",
 	      sig_line1->name, sig_line2->name, 
 	      electrostatic_induction[i][j]);
     }
@@ -73,7 +73,7 @@ void nmmtl_output_matrices(FILE *output_fp, float **electrostatic_induction,
 	 sig_line2 != NULL;
 	 sig_line2 = sig_line2->next, j++)
     {
-      fprintf(output_fp, "L( ::%s , ::%s )= %15.7e\n",
+      fprintf(output_fp, "L( ::%s , ::%s )= %24.16le\n",
 	      sig_line1->name, sig_line2->name, inductance[i][j]);
     }
   }

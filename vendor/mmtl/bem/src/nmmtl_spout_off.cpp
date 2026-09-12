@@ -11,18 +11,18 @@
 #include "nmmtl.h"
 
 
-void nmmtl_spout_off(float the_conductivity,
+void nmmtl_spout_off(double the_conductivity,
 		     CONTOURS_P signals, 
-		     float top_ground_plane_thickness, 
-		     float bottom_ground_plane_thickness,
+		     double top_ground_plane_thickness, 
+		     double bottom_ground_plane_thickness,
 		     FILE *output_file1, FILE *output_file2)
 {
   CONTOURS_P item;
-  float minimumDimension = FLT_MAX;
-  float minimumFrequency;
-  float tmp;
+  double minimumDimension = FLT_MAX;
+  double minimumFrequency;
+  double tmp;
   long minfreq;
-  float conductivity = the_conductivity;
+  double conductivity = the_conductivity;
 
   ////////////////////////////////////////
   // search for the minimum dimension

@@ -478,13 +478,13 @@ int get_design_dir_and_node(int argc, char *argv[],
 
 //
 // Converts the input argument to engineering notation.  The default
-//           format is "%8.3f" and user-specified formats should be similar.
+//           format is "%8.3lf" and user-specified formats should be similar.
 //
-// ENVIRONMENT  char *toengineering(float number, char *units, char *format);
+// ENVIRONMENT  char *toengineering(double number, char *units, char *format);
 //              char *toengineering(double number, char *units, char *format);
 //              char *toengineering(int number, char *units, char *format);
 //
-// INPUTS  float, double, or int
+// INPUTS  double, double, or int
 //         Optional units which are prefixed by the engineering 'size'
 //         Optional character pointer to a printf style format string
 //

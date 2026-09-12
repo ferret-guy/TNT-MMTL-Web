@@ -11,8 +11,8 @@
 void plotFileInitialization(FILE *plotFile,
 			    int units,
 			    int gnd_planes,
-			    float top_ground_plane_thickness,
-			    float bottom_ground_plane_thickness
+			    double top_ground_plane_thickness,
+			    double bottom_ground_plane_thickness
 			  )
 {
   if (plotFile != 0)
@@ -38,11 +38,11 @@ void plotFileInitialization(FILE *plotFile,
 	}
       
       
-      fprintf(plotFile,"Lower Ground Plane Thickness: %e\n",
+      fprintf(plotFile,"Lower Ground Plane Thickness: %le\n",
 	      bottom_ground_plane_thickness);
       if (gnd_planes == 2)
 	{
-	  fprintf(plotFile,"Top Ground Plane Thickness: %e\n",
+	  fprintf(plotFile,"Top Ground Plane Thickness: %le\n",
 		  top_ground_plane_thickness);
 	}
     }

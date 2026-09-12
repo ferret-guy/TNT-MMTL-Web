@@ -228,7 +228,7 @@ static int nmmtl_general_point_in_dielectric(DIELECTRICS_P dielectric,
   return(x >= left - tolerance && x <= right + tolerance);
 }
 
-static float nmmtl_general_point_epsilon(DIELECTRICS_P dielectrics,
+static double nmmtl_general_point_epsilon(DIELECTRICS_P dielectrics,
                                          double x, double y)
 {
   for(DIELECTRICS_P dielectric = dielectrics; dielectric != NULL;
@@ -323,7 +323,7 @@ static int nmmtl_general_arc_clip(CIRCLE_SEGMENTS_P *circle_segments,
         circle->radius * cos(midpoint);
       const double midpoint_y = circle->centery +
         circle->radius * sin(midpoint);
-      const float epsilon = nmmtl_general_point_epsilon(
+      const double epsilon = nmmtl_general_point_epsilon(
         dielectrics, midpoint_x, midpoint_y);
       arc->epsilon[0] = epsilon;
       arc->epsilon[1] = epsilon;

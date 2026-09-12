@@ -334,12 +334,12 @@ export function renderStackupEditor(container: HTMLElement) {
   });
   (container.querySelector('#sk-cseg') as HTMLInputElement).addEventListener('change', (e) =>
     store.update({
-      freeform: { ...store.get().freeform, cseg: Math.min(Math.max(parseInt((e.target as HTMLInputElement).value, 10) || 10, 4), 100) },
+      freeform: { ...store.get().freeform, cseg: Math.min(Math.max(parseInt((e.target as HTMLInputElement).value, 10) || 10, 4), 500) },
     }),
   );
   (container.querySelector('#sk-dseg') as HTMLInputElement).addEventListener('change', (e) =>
     store.update({
-      freeform: { ...store.get().freeform, dseg: Math.min(Math.max(parseInt((e.target as HTMLInputElement).value, 10) || 10, 4), 100) },
+      freeform: { ...store.get().freeform, dseg: Math.min(Math.max(parseInt((e.target as HTMLInputElement).value, 10) || 10, 4), 500) },
     }),
   );
 }

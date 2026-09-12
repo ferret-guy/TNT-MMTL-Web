@@ -70,7 +70,7 @@
   
   FORMAL PARAMETERS:
   
-  float *potential_vector            - vector of potential on all elements
+  double *potential_vector            - vector of potential on all elements
   int conductor_number               - the number of the conductor to set to
   one volt potential
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
@@ -86,7 +86,7 @@
   
   */
 
-void nmmtl_load(float *potential_vector,
+void nmmtl_load(double *potential_vector,
 		int conductor_number,
 		CONDUCTOR_DATA_P conductor_data)
 {
@@ -95,7 +95,7 @@ void nmmtl_load(float *potential_vector,
 	double shape[INTERP_PTS];
 	double Jacobian;
   CELEMENTS_P cel;
-  float nu0,nu1;
+  double nu0,nu1;
   
 #ifdef BEM3_VARIANT
 	double coef;
@@ -158,7 +158,7 @@ void nmmtl_load(float *potential_vector,
   
   FORMAL PARAMETERS:
   
-  float *potential_vector            - vector of potential on all elements
+  double *potential_vector            - vector of potential on all elements
   int conductor_number               - the number of the conductor to set to
   one volt potential
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
@@ -174,7 +174,7 @@ void nmmtl_load(float *potential_vector,
   
   */
 
-void nmmtl_load_free_space(float *potential_vector,
+void nmmtl_load_free_space(double *potential_vector,
 			   int conductor_number,
 			   CONDUCTOR_DATA_P conductor_data)
 {
@@ -183,7 +183,7 @@ void nmmtl_load_free_space(float *potential_vector,
 	double shape[INTERP_PTS];
 	double Jacobian;
   CELEMENTS_P cel;
-  float nu0,nu1;
+  double nu0,nu1;
   
 #ifdef BEM3_VARIANT
 	double coef;

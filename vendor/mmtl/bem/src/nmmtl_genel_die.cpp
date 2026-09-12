@@ -214,9 +214,19 @@ DELEMENTS_P nmmtl_generate_elements_die(DIELECTRIC_SEGMENTS_P ds,
     last_link->endy[1] = endy[1];
     
     first_element = TRUE;
+    const unsigned int graded_total_divisions = divisions;
     
     while(divisions > 0)
     {
+      const unsigned int graded_index=graded_total_divisions-divisions;
+      const double graded_t0=double(graded_index)/graded_total_divisions;
+      const double graded_t1=double(graded_index+1)/graded_total_divisions;
+      const double graded_u0=pow(graded_t0,4)/(pow(graded_t0,4)+pow(1-graded_t0,4));
+      const double graded_u1=pow(graded_t1,4)/(pow(graded_t1,4)+pow(1-graded_t1,4));
+      x=endx[0]+graded_u0*(endx[1]-endx[0]);
+      y=endy[0]+graded_u0*(endy[1]-endy[0]);
+      xhalfincr=(graded_u1-graded_u0)*(endx[1]-endx[0])/2;
+      yhalfincr=(graded_u1-graded_u0)*(endy[1]-endy[0])/2;
       (*number_elements)++;
       
       if(start == NULL)  /* first time through */

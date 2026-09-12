@@ -301,9 +301,8 @@ function distance(
 }
 
 /**
- * Intended edge basis used by MMTL. The legacy C++ has a documented typo in
- * its second-edge branch; this evaluator uses that edge's own exponent so the
- * ideal-corner power integral remains physical and convergent.
+ * Edge basis shared with the corrected double-precision MMTL solver.
+ * Each endpoint uses its own exponent and local coordinate differences.
  */
 function edgeShape(
   element: FieldElement,
@@ -311,8 +310,7 @@ function edgeShape(
 ): [number, number, number] {
   const ordinary = shape(t);
   const adjusted: [number, number, number] = [...ordinary];
-  const x = interpolate(element.x, ordinary);
-  const y = interpolate(element.y, ordinary);
+
   const fullLength = Math.max(
     MIN_POSITIVE,
     distance(element.x[0], element.y[0], element.x[2], element.y[2]),
@@ -321,7 +319,10 @@ function edgeShape(
     const endpoint = edge.end === 0 ? 0 : 2;
     const radial = Math.max(
       MIN_POSITIVE,
-      distance(x, y, element.x[endpoint], element.y[endpoint]),
+      Math.hypot(
+        interpolate(element.x.map((v) => v - element.x[endpoint]), ordinary),
+        interpolate(element.y.map((v) => v - element.y[endpoint]), ordinary),
+      ),
     );
     const exponent = edge.nu - 1;
     const endFactor = (radial / fullLength) ** exponent;
@@ -812,8 +813,8 @@ function rawQuadrature(
       const adjusted = edgeShape(element, sample.t);
       const xM = interpolate(element.x, ordinary);
       const yM = interpolate(element.y, ordinary) - verticalOffsetM;
-      const dx = interpolate(element.x, derivative);
-      const dy = interpolate(element.y, derivative);
+      const dx = interpolate(element.x.map((v) => v - element.x[0]), derivative);
+      const dy = interpolate(element.y.map((v) => v - element.y[0]), derivative);
       const jacobianM = Math.hypot(dx, dy);
       const [nx, ny] = component.outwardNormal(xM, yM, dx, dy);
       const rawSigma = elementsBySolution.map((solutionElements) =>
@@ -1419,9 +1420,15 @@ export function refineConductorMesh(
   if (!Number.isFinite(multiplier) || multiplier <= 0) {
     throw new Error('The conductor-mesh refinement multiplier must be positive.');
   }
+  const polygonEdgeSegments = stackup.polygonEdgeSegments?.map((count) =>
+    Math.max(2, Math.round(count * multiplier))) as Stackup['polygonEdgeSegments'];
+  if (polygonEdgeSegments?.some((count) => count > 1000)) {
+    throw new Error('Refined polygon mesh exceeds 1000 segments per edge.');
+  }
   return {
     ...stackup,
     cseg: stackup.cseg * multiplier,
+    ...(polygonEdgeSegments ? { polygonEdgeSegments } : {}),
     items: stackup.items.map((item) => ({ ...item })),
   };
 }

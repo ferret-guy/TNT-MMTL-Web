@@ -84,8 +84,8 @@
 	double *value     - output coeficient values of integration
   int outer_cond_flag - flags that the outer element is a conductor - 
   determines the Green's Function used.
-	float normalx,   - normals on outer element
-	float normaly,
+	double normalx,   - normals on outer element
+	double normaly,
   
   RETURN VALUE:
   
@@ -100,8 +100,8 @@ void nmmtl_interval_c(double x,
 		      CELEMENTS_P cel,
 					double *value,
 		      int outer_cond_flag,
-					float normalx,
-					float normaly)
+					double normalx,
+					double normaly)
 {
   
   int i;
@@ -262,11 +262,17 @@ void nmmtl_interval_self_c(double x,
 			 nu0,nu1);
     }
     
-    dx1 = x - X;
-    dy1 = y - Y;
+    /* Evaluate the quadratic-coordinate difference in local coordinates.
+       This avoids subtracting nearly equal global positions on graded panels. */
+    const double dt = point-local_coord;
+    const double st = point+local_coord;
+    dx1 = dt*((4.0-4.0*st)*(cel->xpts[1]-cel->xpts[0])+
+              (2.0*st-1.0)*(cel->xpts[2]-cel->xpts[0]));
+    dy1 = dt*((4.0-4.0*st)*(cel->ypts[1]-cel->ypts[0])+
+              (2.0*st-1.0)*(cel->ypts[2]-cel->ypts[0]));
     d1 = sqrt(dx1*dx1 + dy1*dy1);
     
-    dx2 = x - X; 
+    dx2 = dx1; 
     dy2 = y + Y;
     d2 = sqrt(dx2*dx2 + dy2*dy2);
     
@@ -315,11 +321,17 @@ void nmmtl_interval_self_c(double x,
 			 nu0,nu1);
     }
     
-    dx1 = x - X;
-    dy1 = y - Y;
+    /* Evaluate the quadratic-coordinate difference in local coordinates.
+       This avoids subtracting nearly equal global positions on graded panels. */
+    const double dt = point-local_coord;
+    const double st = point+local_coord;
+    dx1 = dt*((4.0-4.0*st)*(cel->xpts[1]-cel->xpts[0])+
+              (2.0*st-1.0)*(cel->xpts[2]-cel->xpts[0]));
+    dy1 = dt*((4.0-4.0*st)*(cel->ypts[1]-cel->ypts[0])+
+              (2.0*st-1.0)*(cel->ypts[2]-cel->ypts[0]));
     d1 = sqrt(dx1*dx1 + dy1*dy1);
     
-    dx2 = x - X; 
+    dx2 = dx1; 
     dy2 = y + Y;
     d2 = sqrt(dx2*dx2 + dy2*dy2);
     
@@ -527,11 +539,17 @@ void nmmtl_interval_self_c_fs(double x,
 			 nu0,nu1);
     }
     
-    dx1 = x - X;
-    dy1 = y - Y;
+    /* Evaluate the quadratic-coordinate difference in local coordinates.
+       This avoids subtracting nearly equal global positions on graded panels. */
+    const double dt = point-local_coord;
+    const double st = point+local_coord;
+    dx1 = dt*((4.0-4.0*st)*(cel->xpts[1]-cel->xpts[0])+
+              (2.0*st-1.0)*(cel->xpts[2]-cel->xpts[0]));
+    dy1 = dt*((4.0-4.0*st)*(cel->ypts[1]-cel->ypts[0])+
+              (2.0*st-1.0)*(cel->ypts[2]-cel->ypts[0]));
     d1 = sqrt(dx1*dx1 + dy1*dy1);
     
-    dx2 = x - X; 
+    dx2 = dx1; 
     dy2 = y + Y;
     d2 = sqrt(dx2*dx2 + dy2*dy2);
     
@@ -580,11 +598,17 @@ void nmmtl_interval_self_c_fs(double x,
 			 nu0,nu1);
     }
     
-    dx1 = x - X;
-    dy1 = y - Y;
+    /* Evaluate the quadratic-coordinate difference in local coordinates.
+       This avoids subtracting nearly equal global positions on graded panels. */
+    const double dt = point-local_coord;
+    const double st = point+local_coord;
+    dx1 = dt*((4.0-4.0*st)*(cel->xpts[1]-cel->xpts[0])+
+              (2.0*st-1.0)*(cel->xpts[2]-cel->xpts[0]));
+    dy1 = dt*((4.0-4.0*st)*(cel->ypts[1]-cel->ypts[0])+
+              (2.0*st-1.0)*(cel->ypts[2]-cel->ypts[0]));
     d1 = sqrt(dx1*dx1 + dy1*dy1);
     
-    dx2 = x - X; 
+    dx2 = dx1; 
     dy2 = y + Y;
     d2 = sqrt(dx2*dx2 + dy2*dy2);
     
@@ -622,7 +646,7 @@ void nmmtl_interval_self_c_fs(double x,
   int outer_cond_flag - flags that the outer element is a conductor - 
   determines the Green's Function used.
 	double normalx,   - normals on outer element
-	float normaly,
+	double normaly,
   
   RETURN VALUE:
   
@@ -637,8 +661,8 @@ void nmmtl_interval_d(double x,
 		      DELEMENTS_P del,
 					double *value,
 		      int outer_cond_flag,
-					float normalx,
-					float normaly)
+					double normalx,
+					double normaly)
 {
   
   int i;
@@ -714,8 +738,8 @@ void nmmtl_interval_d(double x,
   DELEMENTS_P del, - dielectric element
 	double *value     - output coeficient values of integration
 	double point      - the point at which to break the self element
-	float normalx,   - normals on outer element
-	float normaly,
+	double normalx,   - normals on outer element
+	double normaly,
   
   RETURN VALUE:
   
@@ -730,8 +754,8 @@ void nmmtl_interval_self_d(double x,
 			   DELEMENTS_P del,
 				 double *value,
 				 double point,
-				 float normalx,
-				 float normaly)
+				 double normalx,
+				 double normaly)
 {
   
   int i;
@@ -787,7 +811,11 @@ void nmmtl_interval_self_d(double x,
     dy2 = y + Y;
     d2 = sqrt(dx2*dx2 + dy2*dy2);
     
-    Greens_Function = ( dx1*normalx + dy1*normaly ) / ( d1*d1 ) -
+    /* This candidate's finite polygonal dielectric interfaces contain
+       straight panels, including sloped mask walls. The direct normal
+       self-kernel is identically zero. Global-coordinate subtraction can
+       form 0/0 on tiny graded panels; retain only the image contribution. */
+    Greens_Function = -
       ( dx2*normalx + dy2*normaly ) / ( d2*d2 );
     
     for(i=0;i < INTERP_PTS;i++)
@@ -830,7 +858,11 @@ void nmmtl_interval_self_d(double x,
     dy2 = y + Y;
     d2 = sqrt(dx2*dx2 + dy2*dy2);
     
-    Greens_Function = ( dx1*normalx + dy1*normaly ) / ( d1*d1 ) -
+    /* This candidate's finite polygonal dielectric interfaces contain
+       straight panels, including sloped mask walls. The direct normal
+       self-kernel is identically zero. Global-coordinate subtraction can
+       form 0/0 on tiny graded panels; retain only the image contribution. */
+    Greens_Function = -
       ( dx2*normalx + dy2*normaly ) / ( d2*d2 );
     
     for(i=0;i < INTERP_PTS;i++)

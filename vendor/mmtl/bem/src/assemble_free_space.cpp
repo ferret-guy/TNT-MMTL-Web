@@ -77,7 +77,7 @@
   
   int conductor_counter,             - how many conductors
   CONDUCTOR_DATA_P conductor_data,   - array of data on conductors
-  float **assemble_matrix            - out: resultant assemble matrix
+  double **assemble_matrix            - out: resultant assemble matrix
   
   RETURN VALUE:
   
@@ -92,7 +92,7 @@
 
 void nmmtl_assemble_free_space(int conductor_counter,
 			       CONDUCTOR_DATA_P conductor_data,
-			       float **assemble_matrix)
+			       double **assemble_matrix)
 {
   
   int i,j,cond_num,inner_cond_num;

@@ -77,7 +77,7 @@
  *******************************************************************
  */
 
-float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2);
+double nmmtl_find_nu(double epsilon1,double epsilon2,double theta1,double theta2);
 
 /*
  *******************************************************************
@@ -200,8 +200,8 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
   POINT intersection1,intersection2;
   LINE_SEGMENTS_P segment, last_segment, new_ls = NULL, new_ls_2;
   DIELECTRIC_SEGMENTS_P dieseg, last_dieseg, new_ds;
-  float theta1,turn_angle;
-  float deltax,deltay;
+  double theta1,turn_angle;
+  double deltax,deltay;
   double original_die_length;
   long int it;  /* intersection type - recordkeeping flag for IP_* */
   long int cl;  /* colinear type - recordkeeping flag for CL_* */
@@ -292,7 +292,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	      /* if the turn angle is PI, then we have an end-to-end
 		 straight line intersection - we can say nothing about
 		 the epsilon value */
-	      if(turn_angle < PI)
+	      if(turn_angle < PI - 1e-12)
 		segment->epsilon[0] = dieseg->epsilonplus;
 	      
 	      /* now find out if this is the end of a conductor - come to
@@ -323,7 +323,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	      /* if the turn angle is PI, then we have an end-to-end
 		 straight line intersection - we can say nothing about
 		 the epsilon value */
-	      if(turn_angle > -1*PI)
+	      if(turn_angle > -1*PI + 1e-12)
 		segment->epsilon[0] = dieseg->epsilonminus;
 	      
 	      /* now find out if this is the end of a conductor - come to
@@ -367,7 +367,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	      /* if the turn angle is PI, then we have an end-to-end
 		 straight line intersection - we can say nothing about
 		 the epsilon value */
-	      if(turn_angle < PI)
+	      if(turn_angle < PI - 1e-12)
 		segment->epsilon[1] = dieseg->epsilonminus;
 	      
 	      /* now find out if this is the end of a conductor - come to
@@ -398,7 +398,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	      /* if the turn angle is PI, then we have an end-to-end
 		 straight line intersection - we can say nothing about
 		 the epsilon value */
-	      if(turn_angle > -1*PI)
+	      if(turn_angle > -1*PI + 1e-12)
 		segment->epsilon[1] = dieseg->epsilonplus;
 	      
 	      /* now find out if this is the end of a conductor - come to
@@ -697,7 +697,7 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 	    */
 
 #ifdef TNTWEB_GEOM_TRACE
-	  fprintf(stderr,"CL it=%#x cl=%ld ci=%d di=%d int=%d i1=(%.17g,%.17g) i2=(%.17g,%.17g) cseg=(%.17g,%.17g)-(%.17g,%.17g) dseg=(%.17g,%.17g)-(%.17g,%.17g) eps+=%g eps-=%g\n",
+	  fprintf(stderr,"CL it=%#x cl=%ld ci=%d di=%d int=%d i1=(%.17lg,%.17lg) i2=(%.17lg,%.17lg) cseg=(%.17lg,%.17lg)-(%.17lg,%.17lg) dseg=(%.17lg,%.17lg)-(%.17lg,%.17lg) eps+=%lg eps-=%lg\n",
 	          it,(long)cl,(int)cond_inc_dir,(int)die_inc_dir,segment->interior,
 	          intersection1.x,intersection1.y,intersection2.x,intersection2.y,
 	          cseg.x[0],cseg.y[0],cseg.x[1],cseg.y[1],

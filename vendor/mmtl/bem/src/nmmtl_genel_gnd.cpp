@@ -162,7 +162,7 @@ int nmmtl_generate_elements_gnd(CELEMENTS_P *gnd_plane_list_head,
   {
 
     /*
-printf("x=%23.20g, right=%23.20g, x-right=%23.20g\n", x,right_of_gnd_planes,x-right_of_gnd_planes);
+printf("x=%23.20lg, right=%23.20lg, x-right=%23.20lg\n", x,right_of_gnd_planes,x-right_of_gnd_planes);
 */
 
     
@@ -187,7 +187,7 @@ printf("x=%23.20g, right=%23.20g, x-right=%23.20g\n", x,right_of_gnd_planes,x-ri
     element->edge[1] = NULL;
     
     /* set the dielectric coeficient that the ground plane sees */
-		element->epsilon = *((float *)upper_sorted_gdl->data);
+		element->epsilon = *((double *)upper_sorted_gdl->data);
     
     /* Set the global coordinates at the various nodes */
     

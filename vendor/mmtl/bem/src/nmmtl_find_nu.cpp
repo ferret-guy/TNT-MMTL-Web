@@ -52,18 +52,18 @@
  *******************************************************************
  */
 
-static float EPSILON_TERM; /* the constant term in nu equation */
-static float THETA2;       /* constant in nu equation */
-static float THETA_TERM;   /* constant in nu equation 2*theta1 - theta2 */
+static double EPSILON_TERM; /* the constant term in nu equation */
+static double THETA2;       /* constant in nu equation */
+static double THETA_TERM;   /* constant in nu equation 2*theta1 - theta2 */
 
 /*
  *******************************************************************
  **  FUNCTION DECLARATIONS
  *******************************************************************
  */
-extern "C" int FMIN(float (*nmmtl_nu_function)(float *), float *a,
-	float *b, float *x, float *w, float *aerr, float *rerr,
-	float *error, int *ind);
+extern "C" int FMIN(double (*nmmtl_nu_function)(double *), double *a,
+	double *b, double *x, double *w, double *aerr, double *rerr,
+	double *error, int *ind);
 /*
  *******************************************************************
  **  FUNCTION DEFINITIONS
@@ -91,10 +91,10 @@ extern "C" int FMIN(float (*nmmtl_nu_function)(float *), float *a,
   
   FORMAL PARAMETERS:
   
-  float epsilon1     epsilon value passed in
-  float epsilon2     epsilon value passed in
-  float theta1       angle passed in
-  float theta2       angle passed in
+  double epsilon1     epsilon value passed in
+  double epsilon2     epsilon value passed in
+  double theta1       angle passed in
+  double theta2       angle passed in
   
   RETURN VALUE:
   
@@ -107,13 +107,13 @@ extern "C" int FMIN(float (*nmmtl_nu_function)(float *), float *a,
   
   */
 
-float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2)
+double nmmtl_find_nu(double epsilon1,double epsilon2,double theta1,double theta2)
 {
-  float a,b;
-  float nu;
-  float fofnu;
-  float AERR,RERR;
-  float ERROR;
+  double a,b;
+  double nu;
+  double fofnu;
+  double AERR,RERR;
+  double ERROR;
   int IND;
   char msg[150];
   
@@ -134,13 +134,13 @@ float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2)
   FMIN(nmmtl_nu_function,&a,&b,&nu,&fofnu,&AERR,&RERR,&ERROR,&IND);
   
 #ifdef TEST_FIND_NU
-  printf("nu=%f, f(nu)=%f, error=%f\n",nu,fofnu,ERROR);
+  printf("nu=%lf, f(nu)=%lf, error=%lf\n",nu,fofnu,ERROR);
 #endif    
   
   if(IND == 0) return(nu);
   else
   {
-    fprintf(stderr,"ELECTRO-F-NOSOLUTION No solution for transcendental equation for edge effects was found, error=%f\n",ERROR);
+    fprintf(stderr,"ELECTRO-F-NOSOLUTION No solution for transcendental equation for edge effects was found, error=%lf\n",ERROR);
     
     return(-1.0F);
   }
@@ -149,7 +149,7 @@ float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2)
 
 /*
   
-  FUNCTION NAME:  nmmtl_nu_function(float *nu);
+  FUNCTION NAME:  nmmtl_nu_function(double *nu);
   
   
   FUNCTIONAL DESCRIPTION:
@@ -167,7 +167,7 @@ float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2)
   
   FORMAL PARAMETERS:
   
-  float *nu;  the value of nu to use 
+  double *nu;  the value of nu to use 
   Note: this function accepts a pointer to nu since this function
   must be called from FORTRAN which by default passes arguments by 
   reference
@@ -179,9 +179,9 @@ float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2)
   CALLING SEQUENCE:
   
   */
-float nmmtl_nu_function(float *nu)
+double nmmtl_nu_function(double *nu)
 {
-  float x;
+  double x;
   x = sin(*nu * THETA2) - sin(*nu * THETA_TERM) * EPSILON_TERM;
   return( x * x );
 }
@@ -214,29 +214,29 @@ float nmmtl_nu_function(float *nu)
 
 main()
 {
-  float nu;
-  float theta1;
+  double nu;
+  double theta1;
   
   
   printf("symmetry test1\n");
-  printf("theta1 = %f, theta2 = %f, epsilon1 = %f, epsilon2 = %f, nu = %f\n",
+  printf("theta1 = %lf, theta2 = %lf, epsilon1 = %lf, epsilon2 = %lf, nu = %lf\n",
 	 PI,3*PI/2,1.0F,2.0F,nmmtl_find_nu(1.0F,2.0F,PI,3*PI/2));
-  printf("theta1 = %f, theta2 = %f, epsilon1 = %f, epsilon2 = %f, nu = %f\n",
+  printf("theta1 = %lf, theta2 = %lf, epsilon1 = %lf, epsilon2 = %lf, nu = %lf\n",
 	 PI/2,3*PI/2,1.0F,2.0F,nmmtl_find_nu(1.0F,2.0F,PI/2,3*PI/2));
   printf("symmetry test2\n");
-  printf("theta1 = %f, theta2 = %f, epsilon1 = %f, epsilon2 = %f, nu = %f\n",
+  printf("theta1 = %lf, theta2 = %lf, epsilon1 = %lf, epsilon2 = %lf, nu = %lf\n",
 	 2*PI/3,3*PI/2,1.0F,2.0F,nmmtl_find_nu(1.0F,2.0F,2*PI/3,3*PI/2));
-  printf("theta1 = %f, theta2 = %f, epsilon1 = %f, epsilon2 = %f, nu = %f\n",
+  printf("theta1 = %lf, theta2 = %lf, epsilon1 = %lf, epsilon2 = %lf, nu = %lf\n",
 	 5*PI/6,3*PI/2,1.0F,2.0F,nmmtl_find_nu(1.0F,2.0F,5*PI/6,3*PI/2));
   printf("15/8 PI test3\n");
-  printf("theta1 = %f, theta2 = %f, epsilon1 = %f, epsilon2 = %f, nu = %f\n",
+  printf("theta1 = %lf, theta2 = %lf, epsilon1 = %lf, epsilon2 = %lf, nu = %lf\n",
 	 PI/3,15*PI/8,1.0F,2.0F,nmmtl_find_nu(1.0F,2.0F,PI/3,15*PI/8));
   printf("31/16 PI test3\n");
-  printf("theta1 = %f, theta2 = %f, epsilon1 = %f, epsilon2 = %f, nu = %f\n",
+  printf("theta1 = %lf, theta2 = %lf, epsilon1 = %lf, epsilon2 = %lf, nu = %lf\n",
 	 PI/3,31*PI/16,1.0F,2.0F,nmmtl_find_nu(1.0F,2.0F,PI/3,31*PI/16));
   
   printf("now entering evaluation phase:\nenter theta1 and theta2\n");
-  scanf("%f %f",&theta1,&THETA2);
+  scanf("%lf %lf",&theta1,&THETA2);
   
   THETA_TERM = 2*theta1 - THETA2;
   
@@ -244,9 +244,9 @@ main()
   while(nu >= 0.0F)
   {
     printf("enter nu:\n");
-    scanf("%f",&nu);
+    scanf("%lf",&nu);
     if(nu < 0.0F) break;
-    printf("f(nu)=%f\n\n",nmmtl_nu_function(&nu));
+    printf("f(nu)=%lf\n\n",nmmtl_nu_function(&nu));
   }
   
 }

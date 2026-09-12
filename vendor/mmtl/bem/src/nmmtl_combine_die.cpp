@@ -52,7 +52,7 @@ static int nmmtl_point_in_dielectric(DIELECTRICS_P dielectric,
   return(x >= left - tolerance && x <= right + tolerance);
 }
 
-static float nmmtl_point_epsilon(DIELECTRICS_P dielectrics,
+static double nmmtl_point_epsilon(DIELECTRICS_P dielectrics,
                                  double x, double y)
 {
   for(DIELECTRICS_P dielectric = dielectrics; dielectric != NULL;

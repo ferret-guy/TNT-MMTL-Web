@@ -92,17 +92,17 @@ char *range_value; /* for test function range_int */
 void plotFileInitialization(FILE *plotFile,
 			    int units,
 			    int gnd_planes,
-			    float top_ground_plane_thickness,
-			    float bottom_ground_plane_thickness);
+			    double top_ground_plane_thickness,
+			    double bottom_ground_plane_thickness);
 
-void nmmtl_spout_off(float conductivity,
+void nmmtl_spout_off(double conductivity,
 		     CONTOURS_P signals, 
-		     float top_ground_plane_thickness, 
-		     float bottom_ground_plane_thickness,
+		     double top_ground_plane_thickness, 
+		     double bottom_ground_plane_thickness,
 		     FILE *output_file1, FILE *output_file2);
 
-void nmmtl_dc_resistance(float conductivity,CONTOURS_P signals, 
-			 float **Rdc,FILE *fp1,FILE *fp2);
+void nmmtl_dc_resistance(double conductivity,CONTOURS_P signals, 
+			 double **Rdc,FILE *fp1,FILE *fp2);
 
 /*
  *******************************************************************
@@ -131,6 +131,8 @@ void nmmtl_dc_resistance(float conductivity,CONTOURS_P signals,
 
 
 
+int nmmtl_trapezoid_edge_segments[4] = {0,0,0,0};
+
 int main (int argc, char **argv)
 {
   
@@ -139,15 +141,15 @@ int main (int argc, char **argv)
   int units;
   int cntr_seg; /* desired # segments on contours */
   int pln_seg; /* desired # segments on planes */
-  float coupling; /* coupling length (icon attr.) */
-  float risetime; /* signal risetime (icon attr.) */
-  float conductivity; /* conductivity or converted surface */
+  double coupling; /* coupling length (icon attr.) */
+  double risetime; /* signal risetime (icon attr.) */
+  double conductivity; /* conductivity or converted surface */
                       /* resistance (icon attr.) */
-  float frequency; /* icon attr. */
+  double frequency; /* icon attr. */
   int gnd_planes; /* # ground planes in file (1 or 2 needed) */
-  float top_ground_plane_thickness; /* icon attr. */
-  float bottom_ground_plane_thickness; /* icon attr. */
-  float half_minimum_dimension = -1.0; /* unset value */
+  double top_ground_plane_thickness; /* icon attr. */
+  double bottom_ground_plane_thickness; /* icon attr. */
+  double half_minimum_dimension = -1.0; /* unset value */
   struct dielectric *dielectrics = NULL; /* points to lowest layer in list */
   struct contour *signals = NULL; /* 1st signal (lowest) read in */
   struct contour *sigs = NULL; /* 1st signal (lowest) read in */
@@ -157,14 +159,14 @@ int main (int argc, char **argv)
   char filespec[PATH_MAX];    /* filespec for fopen() */
   int num_signals = 0;
   int num_grounds = 0;
-  float **electrostatic_induction;
-  float **inductance;
-  float **Rdc;
-  float *characteristic_impedance;
-  float *propagation_velocity;
-  float *equivalent_dielectric;
-  float **forward_xtk;
-  float **backward_xtk;
+  double **electrostatic_induction;
+  double **inductance;
+  double **Rdc;
+  double *characteristic_impedance;
+  double *propagation_velocity;
+  double *equivalent_dielectric;
+  double **forward_xtk;
+  double **backward_xtk;
   FILE *output_file1;
   FILE *output_file2;
   int element_dump = 0;
@@ -266,7 +268,7 @@ int main (int argc, char **argv)
   printf ("---- Dielectrics ----\n");
   while ( d_temp != NULL )
     {
-      printf ("  (%g,%g) - (%g,%g)  permittivity: %g\n", 
+      printf ("  (%lg,%lg) - (%lg,%lg)  permittivity: %lg\n", 
 	      d_temp->x0, d_temp->y0,
 	      d_temp->x1, d_temp->y1, d_temp->constant);
       d_temp = d_temp->next;
@@ -276,13 +278,13 @@ int main (int argc, char **argv)
   printf ("---- Conductors ----\n");
   while ( c_temp != NULL )
     {
-      printf ("%s  (%g,%g) - (%g,%g)  conductivity: %g  type: %c\n", 
+      printf ("%s  (%lg,%lg) - (%lg,%lg)  conductivity: %lg  type: %c\n", 
 	      c_temp->name, c_temp->x0, c_temp->y0,
 	      c_temp->x1, c_temp->y1, c_temp->conductivity, c_temp->primitive);
       ptt = c_temp->points;
       while ( ptt != NULL )
 	{
-	  printf (" (%g,%g) ", ptt->x, ptt->y);
+	  printf (" (%lg,%lg) ", ptt->x, ptt->y);
 	  ptt = ptt->next;
 	}
       printf ("\n");
@@ -292,13 +294,13 @@ int main (int argc, char **argv)
   printf ("---- GroundWires ----\n");
   while ( c_temp != NULL )
     {
-      printf ("  (%g,%g) - (%g,%g)  conductivity: %g  type: %c\n", 
+      printf ("  (%lg,%lg) - (%lg,%lg)  conductivity: %lg  type: %c\n", 
 	      c_temp->x0, c_temp->y0,
 	      c_temp->x1, c_temp->y1, c_temp->conductivity, c_temp->primitive);
       ptt = c_temp->points;
       while ( ptt != NULL )
 	{
-	  printf (" (%g,%g) ", ptt->x, ptt->y);
+	  printf (" (%lg,%lg) ", ptt->x, ptt->y);
 	  ptt = ptt->next;
 	}
       printf ("\n");
@@ -306,13 +308,13 @@ int main (int argc, char **argv)
     }
 
 
-    printf ("filename: %s\ncntr_seg: %d  pln_seg: %d  coupling: %g\n",
+    printf ("filename: %s\ncntr_seg: %d  pln_seg: %d  coupling: %lg\n",
 	    filename, cntr_seg, pln_seg, coupling);
-    printf ("risetime: %g  conductivity: %g  frequency: %g\n",
+    printf ("risetime: %lg  conductivity: %lg  frequency: %lg\n",
 	    risetime, conductivity, frequency);
-    printf ("half_min_dim: %g  grnd_planes: %d  top_grnd_thck: %d\n",
+    printf ("half_min_dim: %lg  grnd_planes: %d  top_grnd_thck: %d\n",
 	    half_minimum_dimension, gnd_planes, top_ground_plane_thickness);
-    printf ("bot_grnd_thck: %g  num_sig: %d  num_grounds: %d\n",
+    printf ("bot_grnd_thck: %lg  num_sig: %d  num_grounds: %d\n",
 	    bottom_ground_plane_thickness, num_signals, num_grounds);
     printf ("units: %d\n", units);
 
@@ -339,14 +341,14 @@ int main (int argc, char **argv)
   if(!element_dump)
   {
     
-    electrostatic_induction = (float **) dim2(num_signals,num_signals,sizeof(float));
-    inductance = (float **) dim2(num_signals,num_signals,sizeof(float));
-    characteristic_impedance = (float *)malloc(sizeof(float) * num_signals);
-    propagation_velocity = (float *)malloc(sizeof(float) * num_signals);
-    equivalent_dielectric = (float *)calloc(num_signals,sizeof(float));
-    forward_xtk = (float **) dim2(num_signals,num_signals,sizeof(float));
-    backward_xtk = (float **) dim2(num_signals,num_signals,sizeof(float));
-    Rdc = (float **) dim2(num_signals,num_signals,sizeof(float));
+    electrostatic_induction = (double **) dim2(num_signals,num_signals,sizeof(double));
+    inductance = (double **) dim2(num_signals,num_signals,sizeof(double));
+    characteristic_impedance = (double *)malloc(sizeof(double) * num_signals);
+    propagation_velocity = (double *)malloc(sizeof(double) * num_signals);
+    equivalent_dielectric = (double *)calloc(num_signals,sizeof(double));
+    forward_xtk = (double **) dim2(num_signals,num_signals,sizeof(double));
+    backward_xtk = (double **) dim2(num_signals,num_signals,sizeof(double));
+    Rdc = (double **) dim2(num_signals,num_signals,sizeof(double));
 
     /*  Open MMTL results output file  */    
     sprintf (filespec, "%s.result", filename); 
@@ -367,10 +369,10 @@ int main (int argc, char **argv)
     sigs = signals;
     for (sigs = signals; sigs != NULL; sigs = sigs->next)
       {
-	float cndvty = conductivity;
+	double cndvty = conductivity;
 	if ( sigs->conductivity != 0.0 ) 
 	  cndvty = sigs->conductivity;
-	fprintf (output_file1, "Conductivity %s = %g siemens/meter\n", 
+	fprintf (output_file1, "Conductivity %s = %lg siemens/meter\n", 
 		 sigs->name, cndvty);
       }
 

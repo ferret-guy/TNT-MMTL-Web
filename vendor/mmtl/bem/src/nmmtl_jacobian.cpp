@@ -255,8 +255,8 @@ static void nmmtl_jacobian(double local,
   
   for(i=0;i < INTERP_PTS;i++)
   {
-    delta_x = delta_x + derivative[i]*xpts[i];
-    delta_y = delta_y + derivative[i]*ypts[i];
+    delta_x = delta_x + derivative[i]*(xpts[i]-xpts[0]);
+    delta_y = delta_y + derivative[i]*(ypts[i]-ypts[0]);
   }
   
   /* Jacobian is linear displacement - square root of sum of squares of

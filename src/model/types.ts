@@ -125,6 +125,8 @@ export interface Stackup {
   riseTimePs: number;
   cseg: number;
   dseg: number;
+  /** Optional four-edge polygon counts in solver vertex order; circles/rectangles use CSEG. */
+  polygonEdgeSegments?: [number, number, number, number];
 }
 
 export const isConductor = (i: StackupItem): i is ConductorItem =>

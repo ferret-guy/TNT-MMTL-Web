@@ -136,7 +136,7 @@ int nmmtl_fill_die_gaps(int orientation,int *segment_number,
       if(orientation != HORIZONTAL_ORIENTATION || list->at != top_stack)
       {
         /* print warning message */
-        sprintf(smsg,"%g over %g to %g (meters)",
+        sprintf(smsg,"%lg over %lg to %lg (meters)",
     	        list->at,list->start,list->end);
 
 	printf("ELECTRO-W-DIEAIR Diel interf with AIR along %s\n",msg);
@@ -186,7 +186,7 @@ int nmmtl_fill_die_gaps(int orientation,int *segment_number,
     {
 
       /* print warning message */
-      sprintf(smsg,"%g over %g to %g (meters)",
+      sprintf(smsg,"%lg over %lg to %lg (meters)",
   	      list->at,list->start,list->end);
       printf("ELECTRO-W-DIEAIR Diel interf with AIR along %s\n",msg);
     

@@ -89,7 +89,7 @@ int electro_read_icon_section(FILE *fp, NETLIST_REC *netlist, FILE *err)
   {
     attr_name[0] = '\0';
     attr_value[0] = '\0';
-    sscanf(line, " \"%[^\"]\" (%*f , %*f) \"%[^\"]\" ", attr_name,
+    sscanf(line, " \"%[^\"]\" (%*lf , %*lf) \"%[^\"]\" ", attr_name,
 	   attr_value);
     attr_ptr = (ATTRIBUTE_REC *) malloc(sizeof(ATTRIBUTE_REC));
     attr_ptr->name = strcpy(((char *) malloc(strlen(attr_name) + 1)), attr_name);
@@ -148,7 +148,7 @@ int electro_read_icon_section(FILE *fp, NETLIST_REC *netlist, FILE *err)
       {
 	attr_name[0] = '\0';
 	attr_value[0] = '\0';
-	sscanf(line, " \"%[^\"]\" (%*f , %*f) \"%[^\"]\" ", 
+	sscanf(line, " \"%[^\"]\" (%*lf , %*lf) \"%[^\"]\" ", 
 	       attr_name, attr_value);
 	/********************************************************
 	 *							 *

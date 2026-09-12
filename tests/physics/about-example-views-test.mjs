@@ -245,6 +245,12 @@ async function solveViewModel(example, index) {
   }
 
   const primary = await solveNative(stackup, `view-${index + 1}-primary`);
+  if (example.state.mode === 'preset') {
+    assert.ok([0.7, 1.4].includes(example.state.presetParams.t),
+      `${example.label}: standard copper selection`);
+    assert.ok(Math.abs(primary.result.z0[0] - 50) < 0.005,
+      `${example.label}: linked trace must display 50.00 ohm`);
+  }
   let currentBasis = null;
   if (
     groundCurrentUsesSolvedMesh(

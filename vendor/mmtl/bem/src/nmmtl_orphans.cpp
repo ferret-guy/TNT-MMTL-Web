@@ -67,7 +67,7 @@
    several points along the straight segment before falling back to AIR. */
 static int nmmtl_seg_in_uniform_die_union(DIELECTRICS_P dielectrics,
                                           LINESEG_P line,
-                                          float *constant)
+                                          double *constant)
 {
   static const double samples[] = {0.0, 0.25, 0.5, 0.75, 1.0};
   DIELECTRICS_P candidate;
@@ -211,7 +211,7 @@ int nmmtl_orphans(CIRCLE_SEGMENTS_P *conductor_cs,
 	   die region - then, die == NULL and this is an error */
 	if(die == NULL)
 	{
-	  float union_constant;
+	  double union_constant;
 	  if(nmmtl_seg_in_uniform_die_union(dielectrics,&LS,&union_constant))
 	  {
 	    ls->epsilon[0] = union_constant;
@@ -219,7 +219,7 @@ int nmmtl_orphans(CIRCLE_SEGMENTS_P *conductor_cs,
 	  }
 	  else
 	  {
-	    printf("ELECTRO-W-ORPHAN_CS Cannot find dielectric constant for conductor line segment over (%f,%f) to (%f,%f).  Setting to AIR.\n",
+	    printf("ELECTRO-W-ORPHAN_CS Cannot find dielectric constant for conductor line segment over (%lf,%lf) to (%lf,%lf).  Setting to AIR.\n",
 		    ls->startx,ls->starty,ls->endx,ls->endy);
 	    ls->epsilon[0] = AIR_CONSTANT;
 	    ls->epsilon[1] = AIR_CONSTANT;
@@ -288,7 +288,7 @@ int nmmtl_orphans(CIRCLE_SEGMENTS_P *conductor_cs,
 	   die region - then, die == NULL and this is an error */
 	if(die == NULL)
 	{
-	  printf("ELECTRO-W-ORPHAN_CS Cannot find dielectric constant for conductor circle segment centered at (%f,%f).  Setting to AIR.\n",cs->centerx,cs->centery);
+	  printf("ELECTRO-W-ORPHAN_CS Cannot find dielectric constant for conductor circle segment centered at (%lf,%lf).  Setting to AIR.\n",cs->centerx,cs->centery);
 	  cs->epsilon[0] = AIR_CONSTANT;
 	  cs->epsilon[1] = AIR_CONSTANT;
 	  

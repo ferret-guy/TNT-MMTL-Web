@@ -558,6 +558,32 @@ test('ground-current percentages retain useful precision at each scale', () => {
   }
 });
 
+test('physical display smoothing bounds subpixel corner peaks on graded meshes', () => {
+  const elements = [
+    surfaceElement([10000, 10000], { x0: 0, x1: 1e-8 }),
+    surfaceElement([1, 1], { x0: 1e-8, x1: 1 }),
+  ];
+  const original = structuredClone(elements);
+  const smoothed = groundCurrentSmoothedFaceMagnitudes(elements, { radiusM: 0.01 });
+  assert.ok(smoothed[0] < 1.02, 'tiny corner must not flatten the whole display');
+  assert.equal(smoothed[1], 1);
+  assert.deepEqual(elements, original, 'physical densities remain unchanged');
+  const distribution = {
+    mode: 'test', normalizationLabel: '1 A', signals: [], xM: [0],
+    planes: [{ id: 'bottom', label: 'ground', netCurrentA: 1, densityAPerM: [2] }],
+    surfaces: [{ id: 'side', label: 'side', netCurrentA: 0, elements }],
+  };
+  assert.equal(groundCurrentDisplayPeak(distribution, { radiusM: 0.01 }), 2,
+    'planes and surfaces use the same spatially filtered peak');
+  const split = [elements[0], ...Array.from({ length: 100 }, (_, i) =>
+    surfaceElement([1, 1], {
+      x0: 1e-8 + i * (1 - 1e-8) / 100,
+      x1: 1e-8 + (i + 1) * (1 - 1e-8) / 100,
+    }))];
+  const refined = groundCurrentSmoothedFaceMagnitudes(split, { radiusM: 0.01 });
+  assertNear(refined[0], smoothed[0], 'subdivision preserves corner display average');
+});
+
 test('surface display smoothing suppresses quadrature ringing without mutation', () => {
   const elements = [
     surfaceElement([

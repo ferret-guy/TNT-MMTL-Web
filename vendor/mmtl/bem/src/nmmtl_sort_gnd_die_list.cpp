@@ -99,7 +99,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
 			     double left,double right)
 {
   double minstart,maxend;
-  float *data;
+  double *data;
   GND_DIE_LIST_P discard;
   
   *lower_sorted_gdl = NULL;
@@ -126,7 +126,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
     if(minstart > lower_gdl_head->start) minstart = lower_gdl_head->start;
     if(maxend   < lower_gdl_head->end)   maxend = lower_gdl_head->end;
     
-    data = (float *)malloc(sizeof(float));
+    data = (double *)malloc(sizeof(double));
     *data = lower_gdl_head->epsilon;
     /* sort by end point */
     nmmtl_add_to_sorted_list(lower_sorted_gdl,lower_gdl_head->end,
@@ -141,7 +141,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
   /* piece missing on left - it will end at the lowest start */
   if(minstart > left)
   {
-    data = (float *)malloc(sizeof(float));
+    data = (double *)malloc(sizeof(double));
     *data = AIR_CONSTANT;
     /* sort by end point */
     nmmtl_add_to_sorted_list(lower_sorted_gdl,minstart,
@@ -151,7 +151,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
   /* piece missing on right - it will end at the right end */
   if(maxend < right)
   {
-    data = (float *)malloc(sizeof(float));
+    data = (double *)malloc(sizeof(double));
     *data = AIR_CONSTANT;
     /* sort by end point */
     nmmtl_add_to_sorted_list(lower_sorted_gdl,right,
@@ -177,7 +177,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
       if(minstart > upper_gdl_head->start) minstart = upper_gdl_head->start;
       if(maxend   < upper_gdl_head->end)   maxend = upper_gdl_head->end;
       
-      data = (float *)malloc(sizeof(float));
+      data = (double *)malloc(sizeof(double));
       *data = upper_gdl_head->epsilon;
       /* sort by end point */
       nmmtl_add_to_sorted_list(upper_sorted_gdl,upper_gdl_head->end,
@@ -192,7 +192,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
     /* piece missing on left - it will end at the lowest start */
     if(minstart > left)
     {
-      data = (float *)malloc(sizeof(float));
+      data = (double *)malloc(sizeof(double));
       *data = AIR_CONSTANT;
       /* sort by end point */
       nmmtl_add_to_sorted_list(upper_sorted_gdl,minstart,
@@ -202,7 +202,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
     /* piece missing on right - it will end at the right end */
     if(maxend < right)
     {
-      data = (float *)malloc(sizeof(float));
+      data = (double *)malloc(sizeof(double));
       *data = AIR_CONSTANT;
       /* sort by end point */
       nmmtl_add_to_sorted_list(upper_sorted_gdl,right,

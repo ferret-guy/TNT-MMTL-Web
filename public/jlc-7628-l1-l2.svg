@@ -30,7 +30,7 @@
   <rect class="pp" x="30" y="251" width="390" height="45"/>
   <rect class="muted-cu" x="30" y="296" width="390" height="8"/>
   <path class="signal" d="M184 91 L266 91 L270 100 L180 100 Z"/>
-  <text class="label" x="225" y="84" text-anchor="middle">L1 signal, w 0.3520 mm</text>
+  <text class="label" x="225" y="84" text-anchor="middle">L1 signal, w 0.3549 mm</text>
   <text class="small" x="40" y="124">7628 prepreg, 0.2104 mm</text>
   <text class="small" x="40" y="158">L2 reference plane</text>
   <text class="small" x="40" y="202">core, 1.065 mm</text>
@@ -48,7 +48,7 @@
   <rect class="pp" x="480" y="251" width="390" height="45"/>
   <rect class="muted-cu" x="480" y="296" width="390" height="8"/>
   <path class="signal" d="M622 144 L728 144 L732 151 L618 151 Z"/>
-  <text class="label" x="675" y="137" text-anchor="middle">L2 signal, w 0.2797 mm</text>
+  <text class="label" x="675" y="137" text-anchor="middle">L2 signal, w 0.2762 mm</text>
   <text class="small" x="490" y="97">L1 reference plane</text>
   <text class="small" x="490" y="124">above, 0.2104 mm</text>
   <text class="small" x="490" y="202">below, 1.065 mm</text>

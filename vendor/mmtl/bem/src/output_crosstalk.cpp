@@ -13,8 +13,8 @@
  * 									    *
  *   INPUT PARAMETERS							    *
  *	FILE *output_fp;		output file ptr			    *
- *	float **forward_xtk;						    *
- *	float **backward_xtk;						    *
+ *	double **forward_xtk;						    *
+ *	double **backward_xtk;						    *
  *	struct contour *signals;	signal line info (names)	    *
  * 									    *
  *   OUTPUT PARAMETERS							    *
@@ -31,8 +31,8 @@
 
 #include "nmmtl.h"
 
-void nmmtl_output_crosstalk(FILE *output_fp, float **forward_xtk,
-			    float **backward_xtk, struct contour *signals)
+void nmmtl_output_crosstalk(FILE *output_fp, double **forward_xtk,
+			    double **backward_xtk, struct contour *signals)
 {
   
   struct contour *sig_line1, *sig_line2;    /* signal ptrs */
@@ -56,11 +56,11 @@ void nmmtl_output_crosstalk(FILE *output_fp, float **forward_xtk,
       if (j > i)
       {
 	if(forward_xtk[i][j] != 0.0)
-	  fprintf(output_fp, "FXT( ::%s , ::%s )= %11.5e = %11.5f dB\n",
+	  fprintf(output_fp, "FXT( ::%s , ::%s )= %24.16e = %.17g dB\n",
 		  sig_line1->name, sig_line2->name, forward_xtk[i][j],
 		  (20.0 * log10(fabs(forward_xtk[i][j]))));
 	else
-	  fprintf(output_fp, "FXT( ::%s , ::%s )= %11.5e = infinite dB\n",
+	  fprintf(output_fp, "FXT( ::%s , ::%s )= %24.16e = infinite dB\n",
 		  sig_line1->name, sig_line2->name, forward_xtk[i][j]);
       }
     }
@@ -84,11 +84,11 @@ void nmmtl_output_crosstalk(FILE *output_fp, float **forward_xtk,
       if (j > i)
       {
 	if(backward_xtk[i][j] != 0.0)
-	  fprintf(output_fp, "BXT( ::%s , ::%s )= %11.5e = %11.5f dB\n",
+	  fprintf(output_fp, "BXT( ::%s , ::%s )= %24.16e = %.17g dB\n",
 		  sig_line1->name, sig_line2->name, backward_xtk[i][j],
 		  (20.0 * log10(fabs(backward_xtk[i][j]))));
 	else
-	  fprintf(output_fp, "BXT( ::%s , ::%s )= %11.5e = infinite dB\n",
+	  fprintf(output_fp, "BXT( ::%s , ::%s )= %24.16e = infinite dB\n",
 		  sig_line1->name, sig_line2->name, backward_xtk[i][j]);
       }
     }

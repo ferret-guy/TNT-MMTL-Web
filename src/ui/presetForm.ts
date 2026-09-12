@@ -321,15 +321,20 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
               </div>
               <div class="col-6">
                 <label class="form-label mb-0 small" for="pf-cseg">Conductor Mesh Segments (CSEG)</label>
-                <input type="number" step="1" min="4" max="100" class="form-control form-control-sm" id="pf-cseg" value="${p.cseg}">
+                <input type="number" step="1" min="4" max="500" class="form-control form-control-sm" id="pf-cseg" value="${p.cseg}">
               </div>
               <div class="col-6">
                 <label class="form-label mb-0 small" for="pf-dseg">Plane/Dielectric Mesh Segments (DSEG)</label>
-                <input type="number" step="1" min="4" max="100" class="form-control form-control-sm" id="pf-dseg" value="${p.dseg}">
+                <input type="number" step="1" min="4" max="500" class="form-control form-control-sm" id="pf-dseg" value="${p.dseg}">
               </div>
             </div>
-            <p class="small text-body-secondary mt-2 mb-0">Mesh density: 10 quick, 20 good, 45+ high accuracy
-            (slower).</p>
+            ${kind === 'microstrip' && variant === 'se' ? `
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="pf-high-accuracy" ${p.highAccuracy ? 'checked' : ''}>
+              <label class="form-check-label small" for="pf-high-accuracy">Refined mesh and wider domain</label>
+            </div>
+            <p class="small text-body-secondary mt-1 mb-0">Starts at 400 segments with extra corner resolution. Solves may take minutes; compare refinements for your geometry.</p>` : ''}
+            <p class="small text-body-secondary mt-2 mb-0">45 segments is the interactive starting point. Increase the mesh to check convergence.</p>
           </div>
         </div>
       </div>
@@ -535,9 +540,16 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     const v = parseFloat(coverErInput.value);
     if (Number.isFinite(v) && v >= 1) updateCoverEr(v);
   });
+  container.querySelector('#pf-high-accuracy')?.addEventListener('change', (event) => {
+    const highAccuracy = (event.target as HTMLInputElement).checked;
+    const segments = highAccuracy ? 400 : 45;
+    (container.querySelector('#pf-cseg') as HTMLInputElement).value = String(segments);
+    (container.querySelector('#pf-dseg') as HTMLInputElement).value = String(segments);
+    upd({ highAccuracy, cseg: segments, dseg: segments });
+  });
   bindNum('sigma', (v) => upd({ sigma: v }));
-  bindNum('cseg', (v) => upd({ cseg: Math.min(Math.max(Math.round(v), 4), 100) }));
-  bindNum('dseg', (v) => upd({ dseg: Math.min(Math.max(Math.round(v), 4), 100) }));
+  bindNum('cseg', (v) => upd({ cseg: Math.min(Math.max(Math.round(v), 4), 500) }));
+  bindNum('dseg', (v) => upd({ dseg: Math.min(Math.max(Math.round(v), 4), 500) }));
 
   container.querySelector('#pf-cpwbg')?.addEventListener('change', (e) =>
     upd({ cpwBottomGround: (e.target as HTMLInputElement).checked }),

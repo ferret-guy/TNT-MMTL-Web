@@ -549,10 +549,7 @@ function renderCS() {
       renderStreamlinesInto(csSvg, streamlinePaths(fieldGridCache, vp, MILS_PER_METER, 34));
     }
     drawColorbar($('#field-colorbar') as HTMLCanvasElement);
-    const pct = (fieldGridCache.maxResidual * 100).toFixed(1);
-    fieldResidual.textContent = Number.isFinite(fieldGridCache.maxResidual)
-      ? `reconstruction check: ${pct}% ${fieldGridCache.maxResidual > 0.05 ? '⚠' : '✓'}`
-      : '';
+    fieldResidual.textContent = '';
   }
 }
 

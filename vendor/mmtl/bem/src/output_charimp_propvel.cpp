@@ -14,10 +14,10 @@
  * 									    *
  *   INPUT PARAMETERS							    *
  *	FILE *output_fp;		output file ptr			    *
- *	float *characeristic_impedance;	characteristic impedance	    *
- *	float *propagation_velocity;	propagation velocity		    *
- *	float *equivalent_dielectric;   equivalent dielectric constant	    *
- *      float even_odd[4];              even/odd values for 2 conductors    *
+ *	double *characeristic_impedance;	characteristic impedance	    *
+ *	double *propagation_velocity;	propagation velocity		    *
+ *	double *equivalent_dielectric;   equivalent dielectric constant	    *
+ *      double even_odd[4];              even/odd values for 2 conductors    *
  *	struct contour *signals;	signal line info (names)	    *
  * 									    *
  *   OUTPUT PARAMETERS							    *
@@ -36,10 +36,10 @@
 
 void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
 				  /* data to be output */
-				  float *characteristic_impedance,
-				  float *propagation_velocity,
-				  float *equivalent_dielectric,
-				  float even_odd[4],
+				  double *characteristic_impedance,
+				  double *propagation_velocity,
+				  double *equivalent_dielectric,
+				  double even_odd[4],
 				  /* signal line info */
 				  struct contour *signals)
 {
@@ -57,7 +57,7 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
        sig_line1 != NULL;
        sig_line1 = sig_line1->next, i++)
   {
-    fprintf(output_fp, "For Signal Line ::%s= %g\n", sig_line1->name,
+    fprintf(output_fp, "For Signal Line ::%s= %.17g\n", sig_line1->name,
 	    characteristic_impedance[i]);
   }
 
@@ -65,7 +65,7 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
   if(i == 2 && even_odd != 0 && even_odd[0] != -1.0 && even_odd[1] != -1.0)
   {
     fprintf(output_fp, "\nCharacteristic Impedance Odd/Even (Ohms):\n");
-    fprintf(output_fp, "  odd= %g\n even= %g\n",even_odd[0],even_odd[1]);
+    fprintf(output_fp, "  odd= %.17g\n even= %.17g\n",even_odd[0],even_odd[1]);
   }
 
   /********************************************************************
@@ -78,7 +78,7 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
        sig_line1 != NULL;
        sig_line1 = sig_line1->next, i++)
   {
-    fprintf(output_fp, "For Signal Line ::%s= %g\n", sig_line1->name,
+    fprintf(output_fp, "For Signal Line ::%s= %.17g\n", sig_line1->name,
 	    equivalent_dielectric[i]);
   }
 
@@ -92,7 +92,7 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
        sig_line1 != NULL;
        sig_line1 = sig_line1->next, i++)
   {
-    fprintf(output_fp, "For Signal Line ::%s= %15.7e\n", sig_line1->name,
+    fprintf(output_fp, "For Signal Line ::%s= %24.16le\n", sig_line1->name,
 	    propagation_velocity[i]);
   }
 
@@ -100,7 +100,7 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
   if(i == 2 && even_odd != 0 && even_odd[2] != -1.0 && even_odd[3] != -1.0)
   {
     fprintf(output_fp, "\nPropagation Velocity Odd/Even (meters/second):\n");
-    fprintf(output_fp, "  odd= %g\n even= %g\n",even_odd[2],even_odd[3]);
+    fprintf(output_fp, "  odd= %.17g\n even= %.17g\n",even_odd[2],even_odd[3]);
   }
 
   /********************************************************************
@@ -113,7 +113,7 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
        sig_line1 != NULL;
        sig_line1 = sig_line1->next, i++)
   {
-    fprintf(output_fp, "For Signal Line ::%s= %15.7e\n", sig_line1->name,
+    fprintf(output_fp, "For Signal Line ::%s= %24.16le\n", sig_line1->name,
 	    1.0/propagation_velocity[i]);
   }
 
@@ -121,8 +121,8 @@ void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
   if(i == 2 && even_odd != 0 && even_odd[2] != -1.0 && even_odd[3] != -1.0)
   {
     fprintf(output_fp, "\nPropagation Delay Odd/Even (seconds/meter):\n");
-    fprintf(output_fp, "  odd= %g\n",1.0/even_odd[2]);
-    fprintf(output_fp, " even= %g\n",1.0/even_odd[3]);
+    fprintf(output_fp, "  odd= %.17g\n",1.0/even_odd[2]);
+    fprintf(output_fp, " even= %.17g\n",1.0/even_odd[3]);
   }
 
 }

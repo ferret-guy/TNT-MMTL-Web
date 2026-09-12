@@ -25,16 +25,16 @@
  *   INPUT PARAMETERS                                                        
  *	int number_conductors,		    number of conductors	    
  *	struct contour *signals,	    signal line info (names)	    
- *	float **electrostatic_induction,    [B] matrix			    
- *	float **inductance,		    [L] matrix			    
- *	float **cap_abs_diel,		    capacitance in absence of diels 
+ *	double **electrostatic_induction,    [B] matrix			    
+ *	double **inductance,		    [L] matrix			    
+ *	double **cap_abs_diel,		    capacitance in absence of diels 
  *	FILE *output_file1,		    output file ptr #1		    
  *	FILE *output_file2);		    output file ptr #2		    
  *                                                                           
  *   OUTPUT PARAMETERS                                                       
- *	float *characteristic_impedance,    characteristic impedance	    
- *	float *propagation_velocity,	    propagation velocity	    
- *	float *equivalent_dielectric	    equivalent dielectric constant  
+ *	double *characteristic_impedance,    characteristic impedance	    
+ *	double *propagation_velocity,	    propagation velocity	    
+ *	double *equivalent_dielectric	    equivalent dielectric constant  
  *                                                                           
  *   USER FUNCTIONS & SYSTEM SERVICES CALLED                                 
  *									    
@@ -50,19 +50,19 @@
 
 int nmmtl_charimp_propvel_calculate(int number_conductors,
 						struct contour *signals,
-						float **electrostatic_induction,
-						float **inductance,
-						float **cap_abs_diel,
-						float *characteristic_impedance,
-						float *propagation_velocity,
-						float *equivalent_dielectric,
+						double **electrostatic_induction,
+						double **inductance,
+						double **cap_abs_diel,
+						double *characteristic_impedance,
+						double *propagation_velocity,
+						double *equivalent_dielectric,
 						FILE *output_file1,
 						FILE *output_file2)
 {
   int i;  /* loop index */
 
   /* special values if two conductors for odd and even modes */
-  float even_odd[4];
+  double even_odd[4];
   /* char_imp_odd, char_imp_even, prop_vel_odd, prop_vel_even;   */
 
 

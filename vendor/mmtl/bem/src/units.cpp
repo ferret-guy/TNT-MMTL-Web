@@ -392,7 +392,7 @@ void showunit(struct unittype *theunit)
   int printedslash;
   int counter=1;
   
-  printf("\t%.8g",theunit->factor);
+  printf("\t%.8lg",theunit->factor);
   for(ptr=theunit->numerator;*ptr;ptr++)
       {
       if (ptr>theunit->numerator && **ptr &&
@@ -784,7 +784,7 @@ void showanswer(struct unittype *have, struct unittype *want)
       }
   else
       {
-      printf("\t* %.8g\n\t/ %.8g\n",have->factor/want->factor,
+      printf("\t* %.8lg\n\t/ %.8lg\n",have->factor/want->factor,
 	     want->factor/have->factor);
       }
   }

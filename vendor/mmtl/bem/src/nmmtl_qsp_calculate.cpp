@@ -93,17 +93,17 @@ double NON_LINEARITY_FACTOR;
   struct contour  *signals,
   struct contour  *groundwires,
   int gnd_planes,
-  float half_minimum_dimension,
+  double half_minimum_dimension,
   int cntrs_seg,
   int pln_seg,
   
   outputs:
   
-  float **electrostatic_induction,
-  float **inductance,
-  float *characteristic_impedance,
-  float *propagation_velocity,
-  float *equivalent_dielectric,
+  double **electrostatic_induction,
+  double **inductance,
+  double *characteristic_impedance,
+  double *propagation_velocity,
+  double *equivalent_dielectric,
   FILE *output_file1, *output_file2
   
   RETURN VALUE:
@@ -120,16 +120,16 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 				    struct contour  *signals,
 				    struct contour  *groundwires,
 				    int gnd_planes,
-				    float half_minimum_dimension,
+				    double half_minimum_dimension,
 				    int cntr_seg,
 				    int pln_seg,
-				    float coupling,
-				    float risetime,
-				    float **electrostatic_induction,
-				    float **inductance,
-				    float *characteristic_impedance,
-				    float *propagation_velocity,
-				    float *equivalent_dielectric,
+				    double coupling,
+				    double risetime,
+				    double **electrostatic_induction,
+				    double **inductance,
+				    double *characteristic_impedance,
+				    double *propagation_velocity,
+				    double *equivalent_dielectric,
 				    FILE *output_file1,
 				    FILE *output_file2)
 {
@@ -228,10 +228,10 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
     /* ---------------- write out extent data to the plot file ------------- */
     if (plotFile != NULL)
       {
-	fprintf(plotFile,"Upper Extent: %e\n",bottom_of_top_plane);
-	fprintf(plotFile,"Lower Extent: %e\n",top_of_bottom_plane);
-	fprintf(plotFile,"Right Extent: %e\n",right_of_gnd_planes);
-	fprintf(plotFile,"Left Extent: %e\n",left_of_gnd_planes);
+	fprintf(plotFile,"Upper Extent: %le\n",bottom_of_top_plane);
+	fprintf(plotFile,"Lower Extent: %le\n",top_of_bottom_plane);
+	fprintf(plotFile,"Right Extent: %le\n",right_of_gnd_planes);
+	fprintf(plotFile,"Left Extent: %le\n",left_of_gnd_planes);
 	fprintf(plotFile,"\n\n");
       }
 
@@ -367,19 +367,19 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
     }
 
 #ifdef EXTEND_DIAG
-    printf("\nextent_data.left_cs_extent    = %f\n",
+    printf("\nextent_data.left_cs_extent    = %lf\n",
 	   extent_data.left_cs_extent);
-    printf("            .right_cs_extent   = %f\n",
+    printf("            .right_cs_extent   = %lf\n",
 	   extent_data.right_cs_extent);
-    printf("            .left_cond_extent  = %f\n",
+    printf("            .left_cond_extent  = %lf\n",
 	   extent_data.left_cond_extent);
-    printf("            .right_cond_extent = %f\n",
+    printf("            .right_cond_extent = %lf\n",
 	   extent_data.right_cond_extent);
-    printf("            .min_cond_height   = %f\n",
+    printf("            .min_cond_height   = %lf\n",
 	   extent_data.min_cond_height);
-    printf("            .desired_left      = %f\n",
+    printf("            .desired_left      = %lf\n",
 	   extent_data.desired_left);
-    printf("            .desired_right     = %f\n",
+    printf("            .desired_right     = %lf\n",
 	   extent_data.desired_right);
     printf("            .expand_left       = %d\n",
 	   (int)extent_data.expand_left);
@@ -416,17 +416,17 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 	  if (conductor->primitive == 'A')
 	    {
 	      fprintf(plotFile,"Contour Type: Circle\n");
-	      fprintf(plotFile,"Radius: %e\n",conductor->x1);
-	      fprintf(plotFile,"Origin: %e %e\n",conductor->x0,conductor->y0);
+	      fprintf(plotFile,"Radius: %le\n",conductor->x1);
+	      fprintf(plotFile,"Origin: %le %le\n",conductor->x0,conductor->y0);
 	    }
 	  if (conductor->primitive == 'R')
 	    {
 	      fprintf(plotFile,"Contour Type: Polygon\n");
 	      fprintf(plotFile,"Number of Points: 4\n");
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x0,conductor->y0);
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x0,conductor->y1);
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x1,conductor->y1);
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x1,conductor->y0);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x0,conductor->y0);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x0,conductor->y1);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x1,conductor->y1);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x1,conductor->y0);
 	    }
 	  if (conductor->primitive == 'G')
 	    {
@@ -447,7 +447,7 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 	      point = conductor->points;
 	      while (point != 0)
 		{
-		  fprintf(plotFile,"Point: %e %e\n",point->x,point->y);
+		  fprintf(plotFile,"Point: %le %le\n",point->x,point->y);
 		  point = point->next;
 		}
 	    }
@@ -462,17 +462,17 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 	  if (conductor->primitive == 'A')
 	    {
 	      fprintf(plotFile,"Contour Type: Circle\n");
-	      fprintf(plotFile,"Radius: %e\n",conductor->x1);
-	      fprintf(plotFile,"Origin: %e %e\n",conductor->x0,conductor->y0);
+	      fprintf(plotFile,"Radius: %le\n",conductor->x1);
+	      fprintf(plotFile,"Origin: %le %le\n",conductor->x0,conductor->y0);
 	    }
 	  if (conductor->primitive == 'R')
 	    {
 	      fprintf(plotFile,"Contour Type: Polygon\n");
 	      fprintf(plotFile,"Number of Points: 4\n");
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x0,conductor->y0);
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x0,conductor->y1);
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x1,conductor->y1);
-	      fprintf(plotFile,"Point: %e %e\n",conductor->x1,conductor->y0);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x0,conductor->y0);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x0,conductor->y1);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x1,conductor->y1);
+	      fprintf(plotFile,"Point: %le %le\n",conductor->x1,conductor->y0);
 	    }
 	  if (conductor->primitive == 'G')
 	    {
@@ -493,7 +493,7 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 	      point = conductor->points;
 	      while (point != 0)
 		{
-		  fprintf(plotFile,"Point: %e %e\n",point->x,point->y);
+		  fprintf(plotFile,"Point: %le %le\n",point->x,point->y);
 		  point = point->next;
 		}
 	    }
@@ -507,10 +507,10 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 	  fprintf(plotFile,"Contour: Dielectric\n");
 	  fprintf(plotFile,"Contour Type: Polygon\n");
 	  fprintf(plotFile,"Number of Points: 4\n");
-	  fprintf(plotFile,"Point: %e %e\n",dieDieDie->x0,dieDieDie->y0);
-	  fprintf(plotFile,"Point: %e %e\n",dieDieDie->x0,dieDieDie->y1);
-	  fprintf(plotFile,"Point: %e %e\n",dieDieDie->x1,dieDieDie->y1);
-	  fprintf(plotFile,"Point: %e %e\n",dieDieDie->x1,dieDieDie->y0);
+	  fprintf(plotFile,"Point: %le %le\n",dieDieDie->x0,dieDieDie->y0);
+	  fprintf(plotFile,"Point: %le %le\n",dieDieDie->x0,dieDieDie->y1);
+	  fprintf(plotFile,"Point: %le %le\n",dieDieDie->x1,dieDieDie->y1);
+	  fprintf(plotFile,"Point: %le %le\n",dieDieDie->x1,dieDieDie->y0);
 	  fprintf(plotFile,"\n");
 	  dieDieDie = dieDieDie->next;
 	}      

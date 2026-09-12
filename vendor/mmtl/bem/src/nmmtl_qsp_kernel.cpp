@@ -53,7 +53,7 @@
 FILE *plotFile=NULL;
 
 /* What should we set the slope to for a vertical line? */
-const float INFINITE_SLOPE = FLT_MAX;
+const double INFINITE_SLOPE = FLT_MAX;
 
 /* 
  *******************************************************************
@@ -66,7 +66,7 @@ void nmmtl_write_plot_data(
 			   int conductor_counter,
 			   DELEMENTS_P die_elements,
 			   CONDUCTOR_DATA_P conductor_data,
-			   float *sigma_vector,
+			   double *sigma_vector,
 			   FILE *outputFile
 			 );
 
@@ -104,11 +104,11 @@ int lftrg();
   unsigned int node_point_counter,     - total number of node points
   unsigned int highest_conductor_node, - highest node number for conductors
   double length_scale,                 - a scale factor based on element length
-  float **electrostatic_induction,     - out: results (almost capacitance)
-  float **inductance,                  - out: results
-  float *characteristic_impedance,     - out: results
-  float *propagation_velocity,         - out: results
-  float *equivalent_dielectric,        - out: results
+  double **electrostatic_induction,     - out: results (almost capacitance)
+  double **inductance,                  - out: results
+  double *characteristic_impedance,     - out: results
+  double *propagation_velocity,         - out: results
+  double *equivalent_dielectric,        - out: results
   FILE *output_file1, *output_file2);  - file pointers to print results to.
   CONTOURS_P signals                   - list of signal data including names
   
@@ -134,11 +134,11 @@ int nmmtl_qsp_kernel(int conductor_counter,
 				 unsigned int node_point_counter,
 				 unsigned int highest_conductor_node,
 				 double length_scale,
-				 float **electrostatic_induction,
-				 float **inductance,
-				 float *characteristic_impedance,
-				 float *propagation_velocity,
-				 float *equivalent_dielectric,
+				 double **electrostatic_induction,
+				 double **inductance,
+				 double *characteristic_impedance,
+				 double *propagation_velocity,
+				 double *equivalent_dielectric,
 				 FILE *output_file1,
 				 FILE *output_file2,
 				 CONTOURS_P signals)
@@ -146,36 +146,36 @@ int nmmtl_qsp_kernel(int conductor_counter,
 
   int ic, jc;
   int *ipvt;
-  float **assemble_matrix;
-  float *sigma_vector;
-  float *potential_vector;
-  float rcond;
+  double **assemble_matrix;
+  double *sigma_vector;
+  double *potential_vector;
+  double rcond;
   int status;
   int int_status;
   int matrix_order;
   int i,j;
-  float **electrostatic_induction_free_space;
+  double **electrostatic_induction_free_space;
   char msg[256];
   char asmsg1[512],asmsg2[512]; /* strings for asymmetry messages */
-  float error,error_sum,error_max;
+  double error,error_sum,error_max;
   unsigned int error_count;
   CONTOURS_P activeLine;
   
   /* - - - - - - - -  Allocate the matricies and vectors  - - - - - - - - - */
   
   /* allocate and zero space for free space electrostatic induction */
-  electrostatic_induction_free_space = (float **) dim2(conductor_counter,
+  electrostatic_induction_free_space = (double **) dim2(conductor_counter,
 						       conductor_counter,
-						       sizeof(float));
+						       sizeof(double));
   
   /* allocate and zero assemble matrix */
-  assemble_matrix = (float **) dim2(node_point_counter,node_point_counter,sizeof(float));
+  assemble_matrix = (double **) dim2(node_point_counter,node_point_counter,sizeof(double));
   
   /* allocate and zero sigma vector */
-  sigma_vector = (float *)calloc(node_point_counter,sizeof(float));
+  sigma_vector = (double *)calloc(node_point_counter,sizeof(double));
   
   /* allocate and zero potential vector */
-  potential_vector = (float *)calloc(node_point_counter,sizeof(float));
+  potential_vector = (double *)calloc(node_point_counter,sizeof(double));
   
   
   /* - - - - - - - -  Free Space Solution  - - - - - - - - - */
@@ -200,7 +200,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
   {
     for(j = i+1; j<conductor_counter; j++)
     {
-      static float temp;
+      static double temp;
       temp = assemble_matrix[i][j];
       assemble_matrix[i][j] = assemble_matrix[j][i];
       assemble_matrix[j][i] = temp;
@@ -247,14 +247,14 @@ int nmmtl_qsp_kernel(int conductor_counter,
      * 
      * INPUTS  
      *    int *n;               the order of matrix a
-     *    float *a;             the matrix to be factored
+     *    double *a;             the matrix to be factored
      *    int *lda;             leading dimension of a
      *          
      * OUTPUTS  
      *    int *ipvt;	    integer vector of pivot indices
-     *    float *lu;	    factorization of A (= L*U)
+     *    double *lu;	    factorization of A (= L*U)
      *                          if a is not needed, pass a or NULL for lu
-     *    float *rcond;     condition number
+     *    double *rcond;     condition number
      *    int *status;      SUCCESS or LUFACTCN
      *          
      */
@@ -274,12 +274,12 @@ int nmmtl_qsp_kernel(int conductor_counter,
   /* but don't follow exit... */
   if(test_logical("NMMTL_CONDITION_NUMBER"))
     {
-      float t;
+      double t;
       t = 1.0 + rcond;
       if( t == 1.0 )
-	printf ("Assemble(free space) Matrix Condition Number: Warning %g\n",rcond);
+	printf ("Assemble(free space) Matrix Condition Number: Warning %lg\n",rcond);
       else 
-	printf ("Assemble(free space) Matrix Condition Number: OK %g\n",rcond);
+	printf ("Assemble(free space) Matrix Condition Number: OK %lg\n",rcond);
     }
 
   if(status == ELECTRO_LUFACTCN)
@@ -348,13 +348,13 @@ int nmmtl_qsp_kernel(int conductor_counter,
       * 
       * INPUTS  
       *    int *n;          the order of matrix a
-      *    float *a;        lu factored matrix output from lu_factor
-      *    float *b;        right hand side vector (a*x=b)
+      *    double *a;        lu factored matrix output from lu_factor
+      *    double *b;        right hand side vector (a*x=b)
       *    int *lda;        leading dimension of matrix
       *    int *ipvt;	    integer vector of pivot indices from lu_factor
       *          
       * OUTPUTS  
-      *    float *x;	    the solution vector 
+      *    double *x;	    the solution vector 
       *                          if b is not needed, pass b or NULL in for x
       *    int *status;     SUCCESS
       *          
@@ -417,7 +417,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
     
     */
   /*
-    void invert_matrix_cond(int *n,float *a,float *b,
+    void invert_matrix_cond(int *n,double *a,double *b,
     int *lda, int *ldb, int *status)
     * INPUTS  
     *     n                   the size of the a and b is n*n 
@@ -447,12 +447,12 @@ int nmmtl_qsp_kernel(int conductor_counter,
   /* but don't follow exit... */
   if(test_logical("NMMTL_CONDITION_NUMBER"))
     {
-      float t;
+      double t;
       t = 1.0 + rcond;
       if ( t == 1.0 ) 
-	printf ("Capacitance Matrix Condition Number: Warning %g\n",rcond);
+	printf ("Capacitance Matrix Condition Number: Warning %lg\n",rcond);
       else 
-	printf ("Capacitance Matrix Condition Number: OK %g\n",rcond);
+	printf ("Capacitance Matrix Condition Number: OK %lg\n",rcond);
     }
 
   if(status == ELECTRO_INVRSINT)  
@@ -503,7 +503,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
       sprintf(asmsg1,
 	      "**********\n\
   Asymmetry ratio for inductance matrix:\n\
-     %f%% (max), %f%% (average).\n\
+     %lf%% (max), %lf%% (average).\n\
   (Note values greater than 1%% are a probable indication of too few elements.\n\
   Try adjusting CSEG and DSEG attributes.)\n\
 **********",
@@ -514,7 +514,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
     {
       sprintf(asmsg1,
 	      "  Asymmetry ratio for inductance matrix:\n\
-     %f%% (max), %f%% (average)\n",
+     %lf%% (max), %lf%% (average)\n",
 	      error_max*100,error_sum*100/error_count);
       printf ("%s", asmsg1);
     }
@@ -550,7 +550,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
   {
     for(j = i+1; j < node_point_counter; j++)
     {
-      static float temp;
+      static double temp;
       temp = assemble_matrix[i][j];
       assemble_matrix[i][j] = assemble_matrix[j][i];
       assemble_matrix[j][i] = temp;
@@ -592,14 +592,14 @@ int nmmtl_qsp_kernel(int conductor_counter,
      * 
      * INPUTS  
      *    int *n;               the order of matrix a
-     *    float *a;             the matrix to be factored
+     *    double *a;             the matrix to be factored
      *    int *lda;             leading dimension of a
      *          
      * OUTPUTS  
      *    int *ipvt;	    integer vector of pivot indices
-     *    float *lu;	    factorization of A (= L*U)
+     *    double *lu;	    factorization of A (= L*U)
      *                          if a is not needed, pass a or NULL for lu
-     *    float *rcond;     condition number
+     *    double *rcond;     condition number
      *    int *status;      SUCCESS or ELECTRO_LUFACTCN  
      *          
      */
@@ -620,12 +620,12 @@ int nmmtl_qsp_kernel(int conductor_counter,
   /* but don't follow exit... */
   if(test_logical("NMMTL_CONDITION_NUMBER"))
     {
-      float t;
+      double t;
       t = 1.0 + rcond;
       if( t == 1.0 )
-	printf ("Assemble Matrix Condition Number: Warning %g\n",rcond);
+	printf ("Assemble Matrix Condition Number: Warning %lg\n",rcond);
       else 
-	printf ("Assemble Matrix Condition Number: OK %g\n",rcond);
+	printf ("Assemble Matrix Condition Number: OK %lg\n",rcond);
     }
 
   if(status == ELECTRO_LUFACTCN)
@@ -694,13 +694,13 @@ int nmmtl_qsp_kernel(int conductor_counter,
       * 
       * INPUTS  
       *    int *n;          the order of matrix a
-      *    float *a;        lu factored matrix output from lu_factor
-      *    float *b;        right hand side vector (a*x=b)
+      *    double *a;        lu factored matrix output from lu_factor
+      *    double *b;        right hand side vector (a*x=b)
       *    int *lda;        leading dimension of matrix
       *    int *ipvt;	    integer vector of pivot indices from lu_factor
       *          
       * OUTPUTS  
-      *    float *x;	    the solution vector 
+      *    double *x;	    the solution vector 
       *                          if b is not needed, pass b or NULL in for x
       *    int *status;     SUCCESS
       *          
@@ -770,7 +770,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
       sprintf(asmsg2,
 	      "**********\n\
   Asymmetry ratio for electrostatic induction matrix:\n\
-     %f%% (max), %f%% (average).\n\
+     %lf%% (max), %lf%% (average).\n\
   (Note values greater than 1%% are a probable indication of too few elements.\n\
   Try adjusting CSEG and DSEG attributes.)\n\
 **********",
@@ -782,7 +782,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
     {
       sprintf(asmsg2,
 	      "  Asymmetry ratio for electrostatic induction matrix:\n\
-     %f%% (max), %f%% (average).\n",
+     %lf%% (max), %lf%% (average).\n",
 	      error_max*100,error_sum*100/error_count);
       printf ("%s", asmsg2);
     }

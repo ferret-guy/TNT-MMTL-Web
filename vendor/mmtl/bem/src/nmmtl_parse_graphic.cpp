@@ -86,18 +86,18 @@ static int input_pin_attrib(struct pins **front,FILE *in,int units);
 static int input_icon_attrib(FILE *in,
 					 int *cntr_seg,
 					 int *pln_seg,
-					 float *coupling,
-					 float *risetime,
-					 float *conductivity,
-					 float *frequency,
-					 float *top_ground_plane_thickness,
-					 float *bottom_ground_plane_thickness,
+					 double *coupling,
+					 double *risetime,
+					 double *conductivity,
+					 double *frequency,
+					 double *top_ground_plane_thickness,
+					 double *bottom_ground_plane_thickness,
 					 int *units);
 
 static int extrct_pts(char *line,struct contour *polygon,
 				  int *color,
 				  struct pins **front,
-				  float *minimum_dimension);
+				  double *minimum_dimension);
 
 static struct polypoints *find_pin(struct pins **front,
 				   double x0, double y0);
@@ -105,7 +105,7 @@ static struct polypoints *find_pin(struct pins **front,
 static int fill_contour(struct contour *node, char prim,
 	 			         char *line, int color,
 				         FILE *in,int units, 
-				         float *conductivity);
+				         double *conductivity);
 
 static int fill_dielectric(struct dielectric *node,char *line,
 				       FILE *in,int units);
@@ -127,7 +127,7 @@ the graphic file if none are specified is mils.  This is that
 which compares to 2dly in the past and the recently enforced mils
 units within 2dlf.  */
 
-static void convert(int unitsflag, float &value)
+static void convert(int unitsflag, double &value)
 {
   switch(unitsflag)
   {
@@ -150,7 +150,7 @@ static void convert(int unitsflag, float &value)
   }
 }
 
-// also a version which uses a double and doesn't mangle it into a float
+// also a version which uses a double and doesn't mangle it into a double
 
 static void convert(int unitsflag, double &value)
 {
@@ -273,11 +273,11 @@ static void convert(int unitsflag, double &value)
 
 int nmmtl_parse_graphic(char *filename,
 			int *cntr_seg,int *pln_seg,
-			float *coupling,float *risetime,
-			float *conductivity, float *frequency,
-			float *half_minimum_dimension,int *gnd_planes,
-			float *top_ground_plane_thickness,
-			float *bottom_ground_plane_thickness,
+			double *coupling,double *risetime,
+			double *conductivity, double *frequency,
+			double *half_minimum_dimension,int *gnd_planes,
+			double *top_ground_plane_thickness,
+			double *bottom_ground_plane_thickness,
 			struct dielectric **dielectrics,
 			struct contour **signals,
 			struct contour **groundwires,
@@ -316,12 +316,12 @@ int nmmtl_parse_graphic(char *filename,
   double highest_dielectric = -1.0e20; /* the level of the top of the highest */
                                       /* dielectric, initialized to some very*/
                                       /* unlikely number. */
-  float minimum_dimension = FLT_MAX;
+  double minimum_dimension = FLT_MAX;
   
   int upper_ground_planes = 0;  /* keep count of drawn ground planes */
   int lower_ground_planes = 0;
   double ground_x_min = DBL_MAX, ground_x_max = DBL_MIN;
-  float c_conductivity = 0.0;
+  double c_conductivity = 0.0;
 
   char olddefault[20],response[20];
   char fullfilespec[1024];
@@ -398,7 +398,7 @@ int nmmtl_parse_graphic(char *filename,
     }
 
 
-    printf ("ICON conductivity: %g\n", *conductivity);
+    printf ("ICON conductivity: %lg\n", *conductivity);
     // If no cntr_seg and pln_seg values were entered on the
     // command line or were set to zero, set to the new values.
     if ( *cntr_seg < 1 ) 
@@ -458,10 +458,10 @@ int nmmtl_parse_graphic(char *filename,
     case UNITS_MILS :
     case UNITS_NO_UNITS :
     default :
-      sprintf(msg, "Default=%g mils used\n",(float)((*coupling) / MILS_TO_METERS));
+      sprintf(msg, "Default=%lg mils used\n",(double)((*coupling) / MILS_TO_METERS));
       break;
     }
-    printf ("Assign a default value of %g to coupling length\n",
+    printf ("Assign a default value of %lg to coupling length\n",
 	    *coupling);
     printf ("%s\n", msg);
   }
@@ -474,8 +474,8 @@ int nmmtl_parse_graphic(char *filename,
     /* warn about using default values */
     /* assign in units of seconds */
     *risetime = DEFAULT_RISETIME * 1.0e-12;
-    printf ("Assign a default value of %g to risetime\n", *risetime);
-    printf(msg, "Default=%g picoseconds used", (float)(DEFAULT_RISETIME));
+    printf ("Assign a default value of %lg to risetime\n", *risetime);
+    printf(msg, "Default=%lg picoseconds used", (double)(DEFAULT_RISETIME));
   }
   
 
@@ -1471,12 +1471,12 @@ static int input_pin_attrib(struct pins **front,FILE *in,int units)
    - all the following are values for icon attributes
    int *cntr_seg,
    int *pln_seg,
-   float *coupling,
-   float *risetime,
-   float *conductivity,
-   float *frequency,
-   float *top_ground_plane_thickness,
-   float *bottom_ground_plane_thickness,
+   double *coupling,
+   double *risetime,
+   double *conductivity,
+   double *frequency,
+   double *top_ground_plane_thickness,
+   double *bottom_ground_plane_thickness,
    int *units
    
    RETURN VALUE:
@@ -1506,12 +1506,12 @@ static int input_icon_attrib(
 					 FILE *in,
 					 int *cntr_seg,
 					 int *pln_seg,
-					 float *coupling,
-					 float *risetime,
-					 float *conductivity,
-					 float *frequency,
-					 float *top_ground_plane_thickness,
-					 float *bottom_ground_plane_thickness,
+					 double *coupling,
+					 double *risetime,
+					 double *conductivity,
+					 double *frequency,
+					 double *top_ground_plane_thickness,
+					 double *bottom_ground_plane_thickness,
 					 int *units)
 {
   int cntr_seg_set=FALSE, pln_seg_set=FALSE, conduct_set=FALSE;
@@ -1529,8 +1529,8 @@ static int input_icon_attrib(
   
   // Default internally converted values.
   
-  float surf_resist = 0.0;
-  float coupling_in = 0.0;
+  double surf_resist = 0.0;
+  double coupling_in = 0.0;
   
   // Parse each attribute line searching for relevent information.
   
@@ -1828,7 +1828,7 @@ static int input_icon_attrib(
 	// Only use this old attribute (RSTM_PS) if the new attribute
 	// (RISETIME) is not specified.
 	
-	if (sscanf(line, " %*s %*s \" %f \" %*s\n", risetime)!=1)
+	if (sscanf(line, " %*s %*s \" %lf \" %*s\n", risetime)!=1)
 	{
 	printf ("Graphic file error on (%s)\n", line);
 	  return(FAIL);
@@ -1865,7 +1865,7 @@ static int input_icon_attrib(
 	// Only use this old attribute (EDGE_RATE_PS) if the new
 	// attribute (RISETIME) is not specified.
 	
-	if (sscanf(line, " %*s %*s \" %f \" %*s\n", risetime)!=1)
+	if (sscanf(line, " %*s %*s \" %lf \" %*s\n", risetime)!=1)
 	{
 	printf ("Graphic file error on (%s)\n", line);
 	  return(FAIL);
@@ -1893,7 +1893,7 @@ static int input_icon_attrib(
 	// Only use this old attribute (FREQ_MHZ) if the new attribute
 	// (FREQUENCY) is not yet specified.
 	//
-	if (sscanf(line, " %*s %*s \" %f \" %*s\n", frequency)!=1)
+	if (sscanf(line, " %*s %*s \" %lf \" %*s\n", frequency)!=1)
 	{
 	printf ("Graphic file error on (%s)\n", line);
 	  return(FAIL);
@@ -1959,7 +1959,7 @@ static int input_icon_attrib(
 	// Only use this old attribute (CONDUCT)
 	// if the new attribute (CONDUCTIVITY) is not yet specified.
 	//
-	if (sscanf(line, " %*s %*s \" %f \" %*s\n", conductivity)!=1)
+	if (sscanf(line, " %*s %*s \" %lf \" %*s\n", conductivity)!=1)
 	{
 	printf ("Graphic file error on (%s)\n", line);
 	  return(FAIL);
@@ -2025,7 +2025,7 @@ static int input_icon_attrib(
 	//
 	// Only use this old attribute if the new value is not yet specified.
 	//
-	if (sscanf(line, " %*s %*s \" %f \" %*s\n", &surf_resist)!=1)
+	if (sscanf(line, " %*s %*s \" %lf \" %*s\n", &surf_resist)!=1)
 	{
 	printf ("Graphic file error on (%s)\n", line);
 	  return(FAIL);
@@ -2042,7 +2042,7 @@ static int input_icon_attrib(
     
     else if (!strncmp(line, "\t\t\"GND_T_T\"", 11))
     {
-      if(sscanf(line," %*s %*s \" %f \" %*s\n",top_ground_plane_thickness)!=1)
+      if(sscanf(line," %*s %*s \" %lf \" %*s\n",top_ground_plane_thickness)!=1)
       {
 	printf ("Graphic file error on (%s)\n", line);
 	return(FAIL);
@@ -2054,7 +2054,7 @@ static int input_icon_attrib(
     
     else if (!strncmp(line, "\t\t\"GND_T_B\"", 11))
     {
-      if(sscanf(line," %*s %*s \" %f \" %*s\n",
+      if(sscanf(line," %*s %*s \" %lf \" %*s\n",
 		bottom_ground_plane_thickness)!=1)
       {
 	printf ("Graphic file error on (%s)\n", line);
@@ -2226,7 +2226,7 @@ static int input_icon_attrib(
    struct contour *polygon,       polygon under investigation
    int *color,                    indicates if it is a signal or ground wire
    struct pins **front,           list of pins
-   float *minimum_dimension       used to keep track of smallest length in
+   double *minimum_dimension       used to keep track of smallest length in
    the graphic file
    
    RETURN VALUE:
@@ -2243,10 +2243,10 @@ static int input_icon_attrib(
 static int extrct_pts(char *line,struct contour *polygon,
 				  int *color,
 				  struct pins **front,
-				  float *minimum_dimension)
+				  double *minimum_dimension)
 {
   char *cp ;
-  float length;
+  double length;
   struct polypoints *back, *newp, *ppoint;
   char msg[80],msg1[80];	/* custom string error messages */
   
@@ -2459,7 +2459,7 @@ static struct polypoints *find_pin(struct pins **front,
 
 static int fill_contour(struct contour *node, char prim,
 				    char *line, int color,
-				    FILE *in, int units, float *conductivity)
+				    FILE *in, int units, double *conductivity)
 {
   char adequate_dimensions = 0;
   char *ptr;
@@ -2560,7 +2560,7 @@ static int fill_contour(struct contour *node, char prim,
 	{
 	  //	conductivity_set = TRUE;
 	  *conductivity = temp_value;
-	  sprintf (msg, "Conductivity %s = %g siemens/meter",
+	  sprintf (msg, "Conductivity %s = %lg siemens/meter",
 		   node->name, *conductivity);
 	  printf ("%s\n", msg);
 	}
@@ -2960,7 +2960,7 @@ static int fill_dielectric(struct dielectric *node,char *line,
     
     else if (!strncmp(line, "\t\t\"RELATIVE_PERMITTIVITY\"", 25))
     {
-      if (sscanf(&line[25]," %*[^\"]\" %f ",&node->constant) !=1)
+      if (sscanf(&line[25]," %*[^\"]\" %lf ",&node->constant) !=1)
       {
 	//
 	// Fatal error: unable to parse line.

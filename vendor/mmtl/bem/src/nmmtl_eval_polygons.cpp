@@ -42,7 +42,7 @@ typedef struct pgnpts
                             /* of the vector */
   double dx,dy;             /* the displacements of the vector in x and */
                             /* y */
-  float theta2[2];          /* the edge angles */
+  double theta2[2];          /* the edge angles */
   int valid;                /* indicates if this entry on list is used */
   struct pgnpts *next;
 } PGNPTS, *PGNPTS_P;
@@ -97,7 +97,7 @@ extern FILE *dump_file;  /* a file for diagnostics */
   int cntr_seg
   number of segments to break a contour into
   
-  float half_minimum_dimension
+  double half_minimum_dimension
   half of the smallest geometric dimension - used to determine if
   segments are broken small enough.
   
@@ -151,7 +151,7 @@ extern FILE *dump_file;  /* a file for diagnostics */
 
 int nmmtl_evaluate_polygons(int cntr_seg,
 #ifndef NO_HALF_MIN_CHECKING
-					float half_minimum_dimension,
+					double half_minimum_dimension,
 #endif
 					int conductor_counter,
 					CONTOURS_P contour,
@@ -161,7 +161,8 @@ int nmmtl_evaluate_polygons(int cntr_seg,
   static PGNPTS_P head = NULL,last,current;
   POLYPOINTS_P point, last_point;
   int i;
-  float sum_of_angles;
+  int mesh_edge = 0;
+  double sum_of_angles;
   int sign_of_polygon, sign_of_angle;
   LINE_SEGMENTS_P new_segment, last_segment, leading_segment = NULL;
   
@@ -273,6 +274,17 @@ int nmmtl_evaluate_polygons(int cntr_seg,
     point = point->next;
   }
   
+  // Explicit divisions are only valid for a four-edge polygon. Check before
+  // allocating output segments; ordinary polygons keep automatic meshing.
+  if (nmmtl_trapezoid_edge_segments[0] > 0) {
+    int edge_count = 0;
+    for (current=head; current->valid != 0; current=current->next) ++edge_count;
+    if (edge_count != 4) {
+      fprintf(stderr, "EDGE_SEGMENTS requires exactly four polygon edges\n");
+      return FAIL;
+    }
+  }
+
   /* now compute the angles */
   sum_of_angles = 0;
   last = head;
@@ -301,11 +313,11 @@ int nmmtl_evaluate_polygons(int cntr_seg,
   fprintf(dump_file,"polygon vector:\n");
   for(current=head; current->valid != 0; current = current->next)
   {
-    fprintf(dump_file,"  (%f,%f)   angle %f degrees\n",
+    fprintf(dump_file,"  (%lf,%lf)   angle %lf degrees\n",
 	    current->dx,current->dy,
 	    current->theta2[1] * RADIANS_TO_DEGREES );
   }
-  fprintf(dump_file,"sum of angles: %f\n",
+  fprintf(dump_file,"sum of angles: %lf\n",
 	  sum_of_angles * RADIANS_TO_DEGREES);
 #endif
 #endif
@@ -339,7 +351,7 @@ int nmmtl_evaluate_polygons(int cntr_seg,
 #ifdef NMMTL_DUMP_DIAG
   for(current=head; current->valid != 0; current = current->next)
   {
-    fprintf(dump_file,"  (%f,%f)   theta2 %f degrees\n",
+    fprintf(dump_file,"  (%lf,%lf)   theta2 %lf degrees\n",
 	    current->dx,current->dy,
 	    current->theta2[1] * RADIANS_TO_DEGREES );
   }
@@ -417,6 +429,10 @@ int nmmtl_evaluate_polygons(int cntr_seg,
     
 #endif    
     
+    if(nmmtl_trapezoid_edge_segments[0]>0) {
+      if(mesh_edge>=4 || nmmtl_trapezoid_edge_segments[mesh_edge]<2) return FAIL;
+      new_segment->divisions=nmmtl_trapezoid_edge_segments[mesh_edge++];
+    }
     /* associate edge pairs */
     /* for first segment, edge pair association will need to */
     /* wait till the list is done */

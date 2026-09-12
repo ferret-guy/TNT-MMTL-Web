@@ -81,9 +81,9 @@
 	double xstart,                    - starting x value for expansion section
 	double xend,                      - ending x value ""
 	double incr_start,                - starting increment for an element (size of)
-  float epsilonplus,               - epsilon to positive direction
-  float epsilonminus,              - epsilon to negative direction
-  float normaly,                   - y element of normal vector (normalx is zero)
+  double epsilonplus,               - epsilon to positive direction
+  double epsilonminus,              - epsilon to negative direction
+  double normaly,                   - y element of normal vector (normalx is zero)
 	double y,                         - y value for elements to be generated
   unsigned int *node_point_counter - counting all node points 
   DELEMENTS_P *element_p           - last pointer in linked list of all elements
@@ -96,8 +96,8 @@
   
   */
 
-void nmmtl_nl_expand(double xstart,double xend,double incr_start,float epsilonplus,
-										 float epsilonminus,float normaly,double y,
+void nmmtl_nl_expand(double xstart,double xend,double incr_start,double epsilonplus,
+										 double epsilonminus,double normaly,double y,
                      unsigned int *node_point_counter,
                      DELEMENTS_P *element_p, int *number_elements,
                      unsigned int common_node)

@@ -127,8 +127,8 @@ int nmmtl_find_ground_planes(struct dielectric *dielectrics,
   }
   
 #ifdef DIAG_GND_PLANES
-  printf("ground planes:\n top of bottom: %g\n bottom of top: %g\n\
- left: %g\n right: %g\n",*top_of_bottom_plane,*bottom_of_top_plane,
+  printf("ground planes:\n top of bottom: %lg\n bottom of top: %lg\n\
+ left: %lg\n right: %lg\n",*top_of_bottom_plane,*bottom_of_top_plane,
 	  *left,*right);
 #endif
   return(SUCCESS);

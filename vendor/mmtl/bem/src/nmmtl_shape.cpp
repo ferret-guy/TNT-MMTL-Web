@@ -92,7 +92,7 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
     the shape function
     double *shape        - the coeficients of the shape function
     CELEMENTS_P cel     - pointer to the conductor element
-    float nu0,nu1       - the nu value to use for edge[0] and edge[1]
+    double nu0,nu1       - the nu value to use for edge[0] and edge[1]
     different for free space
     
     RETURN VALUE:
@@ -109,8 +109,8 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
   void nmmtl_shape_c_edge(double point,
 			  double *shape,
 			  CELEMENTS_P cel,
-			  float nu0,
-			  float nu1)
+			  double nu0,
+			  double nu1)
 {
   register int i;
   register double X,Y; /* interpolated points */
@@ -121,6 +121,8 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
   /* first get the ordinary shape function */
   
   nmmtl_shape(point,shape);
+  double geometry_shape[INTERP_PTS];
+  for(i=0;i<INTERP_PTS;i++) geometry_shape[i]=shape[i];
   
   /* then process the edge effects:
      
@@ -181,14 +183,13 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
     
     for(i = 0; i < INTERP_PTS; i++)
     {
-      X += shape[i] * cel->xpts[i];
-      Y += shape[i] * cel->ypts[i];
+      X += geometry_shape[i] * (cel->xpts[i]-cel->xpts[0]);
+      Y += geometry_shape[i] * (cel->ypts[i]-cel->ypts[0]);
     }
     
     /* Now subtract the p0 value */
     
-    X -= cel->xpts[0];
-    Y -= cel->ypts[0];
+    /* Coordinates are accumulated relative to the endpoint above. */
     
     /* now find the vector displacement */
     
@@ -274,14 +275,13 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
     
     for(i = 0; i < INTERP_PTS; i++)
     {
-      X += shape[i] * cel->xpts[i];
-      Y += shape[i] * cel->ypts[i];
+      X += geometry_shape[i] * (cel->xpts[i]-cel->xpts[2]);
+      Y += geometry_shape[i] * (cel->ypts[i]-cel->ypts[2]);
     }
     
     /* Now subtract the p2 value */
     
-    X -= cel->xpts[2];
-    Y -= cel->ypts[2];
+    /* Coordinates are accumulated relative to the endpoint above. */
     
     /* now find the vector displacement */
     
@@ -336,7 +336,7 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
     deltax = cel->xpts[0] - cel->xpts[2];
     deltay = cel->ypts[0] - cel->ypts[2];
     denominator = sqrt(deltax*deltax + deltay*deltay);
-    factor = pow( (numerator/denominator), (nu0 - 1.0) );
+    factor = pow( (numerator/denominator), (nu1 - 1.0) );
     shape[0] *= factor;
     /* i = 2 */
     shape[2] *= factor;
@@ -344,8 +344,7 @@ COMPILATION ERROR ERROR ---      INTERP_PTS != 3       --- ERROR ERROR
     deltax = cel->xpts[1] - cel->xpts[2];
     deltay = cel->ypts[1] - cel->ypts[2];
     denominator = sqrt(deltax*deltax + deltay*deltay);
-    // the following should contain nu1 not nu0
-    shape[1] *= pow( (numerator/denominator), (nu0 - 1.0) );
+    shape[1] *= pow( (numerator/denominator), (nu1 - 1.0) );
     
   }
 }

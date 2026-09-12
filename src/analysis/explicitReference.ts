@@ -18,7 +18,7 @@ import { solverSignalBindings } from '../xsctn/generate.ts';
 import { calculateMmtlCrosstalk } from './crosstalk.ts';
 
 export const EXPLICIT_REFERENCE_CLEARANCE_MULTIPLIER = 50;
-export const MMTL_SPEED_OF_LIGHT_M_PER_S = 2.997925e8;
+export const MMTL_SPEED_OF_LIGHT_M_PER_S = 299792458;
 export const EXPLICIT_REFERENCE_CONDITION_LIMIT = 1e12;
 
 const UNIT_SCALE_M: Record<LengthUnits, number> = {

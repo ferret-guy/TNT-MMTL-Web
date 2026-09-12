@@ -102,8 +102,8 @@ char *getlogin() {
   char *filename,
   int num_signals,
   int num_grounds
-  float coupling,
-  float risetime
+  double coupling,
+  double risetime
   
   RETURN VALUE:
   
@@ -122,8 +122,8 @@ void nmmtl_output_headers(FILE *output_file,
 			  int num_signals,
 			  int num_grounds,
 			  int num_ground_planes,
-			  float coupling,
-			  float risetime,
+			  double coupling,
+			  double risetime,
 			  int cntr_seg,
 			  int pln_seg)
 {
@@ -152,8 +152,8 @@ void nmmtl_output_headers(FILE *output_file,
 	  "Number of Ground Planes = %3d\n", num_ground_planes);
   fprintf(output_file,
 	  "Number of Ground Wires  = %3d\n", num_grounds);
-  fprintf(output_file,"Coupling Length = %9.5f meters\n",coupling);
-  fprintf(output_file,"Rise Time = %10.4f picoseconds\n",risetime*1.0e12);
+  fprintf(output_file,"Coupling Length = %9.5lf meters\n",coupling);
+  fprintf(output_file,"Rise Time = %10.4lf picoseconds\n",risetime*1.0e12);
   fprintf(output_file,"Contour (conductor) segments [cseg] = %d\n",cntr_seg);
   fprintf(output_file,"Ground Plane/Dielectric segments [dseg] = %d\n",pln_seg);
   

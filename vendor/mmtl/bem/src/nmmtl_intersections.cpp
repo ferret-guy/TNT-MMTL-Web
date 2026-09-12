@@ -1331,7 +1331,7 @@ int nmmtl_seg_seg_inter(LINESEG_P segment1,
     */
 
 #ifdef TNTWEB_GEOM_TRACE
-  fprintf(stderr,"SSI s1=(%.17g,%.17g)-(%.17g,%.17g) s2=(%.17g,%.17g)-(%.17g,%.17g) sl1=%.17g sl2=%.17g ic1=%.17g ic2=%.17g\n",
+  fprintf(stderr,"SSI s1=(%.17lg,%.17lg)-(%.17lg,%.17lg) s2=(%.17lg,%.17lg)-(%.17lg,%.17lg) sl1=%.17lg sl2=%.17lg ic1=%.17lg ic2=%.17lg\n",
           segment1->x[0],segment1->y[0],segment1->x[1],segment1->y[1],
           segment2->x[0],segment2->y[0],segment2->x[1],segment2->y[1],
           slope1,slope2,intercept1,intercept2);

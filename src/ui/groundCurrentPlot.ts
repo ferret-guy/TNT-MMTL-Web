@@ -416,12 +416,38 @@ function medianMagnitude(values: readonly number[]): number {
  */
 export function groundCurrentSmoothedFaceMagnitudes(
   elements: readonly GroundCurrentSurfaceElementTrace[],
+  options?: { radiusM: number },
 ): number[] {
   const medians = elements.map((element) =>
     medianMagnitude(
       element.samples.map((sample) => sample.densityAPerM),
     )
   );
+  const radius = options?.radiusM ?? 0;
+  if (radius > 0) {
+    // A fixed panel count overweights subpixel corner singularities on graded
+    // meshes. Average over a visible length, only in the display layer.
+    let distance = 0;
+    const intervals = elements.map((element) => {
+      const span = surfaceElementDirection(element)?.span ?? 0;
+      const start = distance;
+      distance += span;
+      return { start, end: distance, center: start + span / 2 };
+    });
+    return intervals.map(({ center }) => {
+      let weighted = 0;
+      let length = 0;
+      for (let index = 0; index < intervals.length; index++) {
+        const interval = intervals[index];
+        const overlap = Math.max(0,
+          Math.min(center + radius, interval.end) -
+          Math.max(center - radius, interval.start));
+        weighted += overlap * medians[index];
+        length += overlap;
+      }
+      return length > 0 ? weighted / length : 0;
+    });
+  }
   if (medians.length < 2) return medians;
   return medians.map((value, index) => {
     const previous = medians[Math.max(0, index - 1)];
@@ -433,6 +459,7 @@ export function groundCurrentSmoothedFaceMagnitudes(
 /** One post-filter peak shared by every trace in the visualization. */
 export function groundCurrentDisplayPeak(
   distribution: GroundCurrentDistribution,
+  options?: { radiusM: number },
 ): number {
   let peak = 0;
   for (const plane of distribution.planes) {
@@ -442,7 +469,7 @@ export function groundCurrentDisplayPeak(
   }
   for (const surface of distribution.surfaces ?? []) {
     for (const face of groundCurrentSurfaceFaceRuns(surface.elements)) {
-      for (const magnitude of groundCurrentSmoothedFaceMagnitudes(face)) {
+      for (const magnitude of groundCurrentSmoothedFaceMagnitudes(face, options)) {
         peak = Math.max(peak, magnitude);
       }
     }
@@ -598,7 +625,10 @@ export function renderGroundCurrentOverlay(
     },
     0,
   ) / (drivenCurrentMagnitude || distribution.signals.length || 1);
-  const globalPeak = groundCurrentDisplayPeak(distribution);
+  const smoothing = {
+    radiusM: 2 * options.modelUnitScaleM / Math.abs(sx(1) - sx(0)),
+  };
+  const globalPeak = groundCurrentDisplayPeak(distribution, smoothing);
   const denominator = globalPeak > 0 ? globalPeak : 1;
 
   const defs = svg.querySelector('defs') ?? svgElement('defs');
@@ -756,7 +786,7 @@ export function renderGroundCurrentOverlay(
     const areaSubpaths: string[] = [];
     const lineSubpaths: string[] = [];
     for (const face of groundCurrentSurfaceFaceRuns(surface.elements)) {
-      const magnitudes = groundCurrentSmoothedFaceMagnitudes(face);
+      const magnitudes = groundCurrentSmoothedFaceMagnitudes(face, smoothing);
       const renderPoint = (
         point: SurfaceBasePoint,
         magnitude: number,
@@ -793,8 +823,8 @@ export function renderGroundCurrentOverlay(
     }
     if (areaSubpaths.length > 0) {
       // The physical samples remain untouched. For display only, collapse the
-      // eight singular quadrature samples per element to their median and use
-      // a short face-local filter. Separate subpaths prevent corner bridges.
+      // singular quadrature samples per element to their median and average
+      // over a visible face-local length. Separate subpaths prevent corner bridges.
       surfaceGroup.appendChild(svgElement('path', {
         d: areaSubpaths.join(' '),
         class: 'cs-current-surface-area',

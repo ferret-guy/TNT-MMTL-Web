@@ -135,14 +135,14 @@
 /* physical constants */
 
 #define AIR_CONSTANT 1.0         /* default dielectric constant (air) */
-#define PI 3.141592654L
+#define PI 3.141592653589793238462643383279502884L
 #define RADIANS_TO_DEGREES 57.29577951L
-#define SPEED_OF_LIGHT 2.997925E+08L /* meters/second */
-#define EPSILON_NAUGHT 1.0e-9/(36.0*PI)
+#define SPEED_OF_LIGHT 299792458.0L /* meters/second */
+#define EPSILON_NAUGHT (1.0L/((4.0e-7L*PI)*SPEED_OF_LIGHT*SPEED_OF_LIGHT))
 #define MU_NAUGHT PI*4.0e-7L
 
 /* compound physical constants */
-#define C_SQUARED_INVERTED 0.11111111e-16 /* speed of light squared then
+#define C_SQUARED_INVERTED (1.0L/(SPEED_OF_LIGHT*SPEED_OF_LIGHT)) /* speed of light squared then
  					     inverted */
 #define ASSEMBLE_CONST_1 1.0/(2.0*PI*AIR_CONSTANT)
 
@@ -174,7 +174,10 @@
 
 /* What should we set the slope to for a vertical line? */
 /* this is now defined in nmmtl_qsp_kernel */
-extern const float INFINITE_SLOPE;
+extern const double INFINITE_SLOPE;
+
+/* Optional per-edge polygon divisions, supplied in the cross-section header. */
+extern int nmmtl_trapezoid_edge_segments[4];
 
 /* 1.06 The file cad$common:gpge_electro.attributes sets the maximum size for
    the attributes entered. It states that the SIG_NAME primitive attribute
@@ -223,31 +226,31 @@ extern const float INFINITE_SLOPE;
    in legendre.h and included in nmmtl_main.c */
 
 /* used in nmmtl_assemble* */
-#define Legendre_root_a_max 10
-#define Legendre_root_a LEGENDRE_10_ROOTS
+#define Legendre_root_a_max 24
+#define Legendre_root_a LEGENDRE_24_ROOTS
 extern double Legendre_root_a[];
-#define Legendre_weight_a LEGENDRE_10_WEIGHTS
+#define Legendre_weight_a LEGENDRE_24_WEIGHTS
 extern double Legendre_weight_a[];
 
 /* used in nmmtl_load */
-#define Legendre_root_l_max 10
-#define Legendre_root_l LEGENDRE_10_ROOTS
+#define Legendre_root_l_max 24
+#define Legendre_root_l LEGENDRE_24_ROOTS
 extern double Legendre_root_l[];
-#define Legendre_weight_l LEGENDRE_10_WEIGHTS
+#define Legendre_weight_l LEGENDRE_24_WEIGHTS
 extern double Legendre_weight_l[];
 
 /* used in nmmtl_charge */
-#define Legendre_root_c_max 10
-#define Legendre_root_c LEGENDRE_10_ROOTS
+#define Legendre_root_c_max 24
+#define Legendre_root_c LEGENDRE_24_ROOTS
 extern double Legendre_root_c[];
-#define Legendre_weight_c LEGENDRE_10_WEIGHTS
+#define Legendre_weight_c LEGENDRE_24_WEIGHTS
 extern double Legendre_weight_c[];
 
 /* used in nmmtl_interval */
-#define Legendre_root_i_max 6
-#define Legendre_root_i LEGENDRE_6_ROOTS
+#define Legendre_root_i_max 24
+#define Legendre_root_i LEGENDRE_24_ROOTS
 extern double Legendre_root_i[];
-#define Legendre_weight_i LEGENDRE_6_WEIGHTS
+#define Legendre_weight_i LEGENDRE_24_WEIGHTS
 extern double Legendre_weight_i[];
 
 
@@ -283,7 +286,7 @@ struct gnd_die_list;
 /*
   
   Define what is the biggest pointer type on this system - such that it
-	could allow enough storage to hold a pointer to any item - char, float,
+	could allow enough storage to hold a pointer to any item - char, double,
   struct.  Merely for enhanced portability.
   
   */
@@ -334,7 +337,7 @@ typedef struct contour
 {
   struct contour *next;
   struct polypoints *points;
-  float conductivity;
+  double conductivity;
   double x0,y0,x1,y1;
   char primitive;
   char name[SIZE_SIG_NAME];
@@ -374,7 +377,7 @@ typedef struct dielectric
      actual endpoints of the horizontal top edge.  Rectangles use x0/x1. */
   double top_x0, top_x1;
   int primitive;
-  float constant, tangent;
+  double constant, tangent;
 } DIELECTRICS, *DIELECTRICS_P;
 
 
@@ -399,7 +402,7 @@ typedef struct dielectric_sub_segments
   struct dielectric_sub_segments *next;
   double at;
   double start, end;
-  float epsilon;
+  double epsilon;
   int divisions;
 } DIELECTRIC_SUB_SEGMENTS;
 
@@ -426,7 +429,7 @@ typedef struct dielectric_segments
      legacy vertical/horizontal segments these mirror at/start/end. */
   double x0, y0, x1, y1;
   double length;
-  float epsilonplus, epsilonminus;
+  double epsilonplus, epsilonminus;
   int divisions;
   int segment_number;
   unsigned char end_in_conductor;
@@ -471,7 +474,7 @@ typedef struct circle_segments
   double centerx,centery,radius;
   double startangle,endangle;
   double radians;
-  float epsilon[2];
+  double epsilon[2];
   int divisions;
   int conductor;
 } CIRCLE_SEGMENTS, *CIRCLE_SEGMENTS_P;
@@ -502,9 +505,9 @@ typedef struct line_segments
   struct line_segments *edge_pair[2];
   double startx,starty,endx,endy;
   double length;
-  float theta2[2];
-  float nu[2],free_space_nu[2];
-  float epsilon[2];
+  double theta2[2];
+  double nu[2],free_space_nu[2];
+  double epsilon[2];
   int interior;
   int divisions;
   int conductor;
@@ -524,8 +527,8 @@ typedef struct delements
 {
   struct delements *next;
   double xpts[INTERP_PTS],ypts[INTERP_PTS];
-  float epsilonplus,epsilonminus;
-  float normalx,normaly;
+  double epsilonplus,epsilonminus;
+  double normalx,normaly;
   int node[INTERP_PTS];
   
 } DELEMENTS, *DELEMENTS_P;
@@ -545,7 +548,7 @@ typedef struct delements
 
 typedef struct edgedata
 {
-  float nu, free_space_nu;
+  double nu, free_space_nu;
   
 } EDGEDATA, *EDGEDATA_P;
 
@@ -556,7 +559,7 @@ typedef struct celements
   struct celements *next;
   EDGEDATA_P edge[2];
   double xpts[INTERP_PTS],ypts[INTERP_PTS];
-  float epsilon;
+  double epsilon;
   int node[INTERP_PTS];
   
 } CELEMENTS, *CELEMENTS_P;
@@ -657,7 +660,7 @@ typedef FLT_KEY_LIST_P SORTED_GND_DIE_LIST_P;
 typedef struct gnd_die_list
 {
   double start,end;
-  float epsilon;
+  double epsilon;
   struct gnd_die_list *next;
 } GND_DIE_LIST, *GND_DIE_LIST_P;
 
@@ -703,16 +706,16 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 				    struct contour  *signals,
 				    struct contour  *groundwires,
 				    int gnd_planes,
-				    float half_minimum_dimension,
+				    double half_minimum_dimension,
 				    int cntr_seg,
 				    int pln_seg,
-				    float coupling,
-				    float risetime,
-				    float **electrostatic_induction,
-				    float **inductance,
-				    float *characteristic_impedance,
-				    float *propagation_velocity,
-				    float *equivalent_dielectric,
+				    double coupling,
+				    double risetime,
+				    double **electrostatic_induction,
+				    double **inductance,
+				    double *characteristic_impedance,
+				    double *propagation_velocity,
+				    double *equivalent_dielectric,
 				    FILE *output_file1,
 				    FILE *output_file2);
 
@@ -745,13 +748,13 @@ int nmmtl_qsp_calculate(struct dielectric *dielectrics,
 
 int nmmtl_xtk_calculate(int number_conductors,
 				    struct contour *signals,
-				    float **electrostatic_induction,
-				    float **inductance,
-				    float coupling,
-				    float risetime,
-				    float *propagation_velocity,
-				    float **forward_xtk,
-				    float **backward_xtk,
+				    double **electrostatic_induction,
+				    double **inductance,
+				    double coupling,
+				    double risetime,
+				    double *propagation_velocity,
+				    double **forward_xtk,
+				    double **backward_xtk,
 				    FILE *output_file1,
 				    FILE *output_file2);
 
@@ -788,19 +791,19 @@ int nmmtl_xtk_calculate(int number_conductors,
 void nmmtl_add_to_sorted_list(FLT_KEY_LIST_P *list,double key,char *data);
 
 /* nmmtl_angle_of_intersections.c */
-float nmmtl_angle_of_intersection(float x1, float y1, float x2, float y2);
+double nmmtl_angle_of_intersection(double x1, double y1, double x2, double y2);
 
 /* nmmtl_assemble.cxx */
 void nmmtl_assemble(int conductor_counter,
 		    CONDUCTOR_DATA_P conductor_data,
 		    DELEMENTS_P die_elements,
-		    float length_scale,
-		    float **assemble_matrix);
+		    double length_scale,
+		    double **assemble_matrix);
 
 /* nmmtl_assemble_free_space.cxx */
 void nmmtl_assemble_free_space(int conductor_counter,
 			       CONDUCTOR_DATA_P conductor_data,
-			       float **assemble_matrix);
+			       double **assemble_matrix);
 
 
 /* nmmtl_build_gnd_die_list.cxx */
@@ -809,25 +812,25 @@ GND_DIE_LIST_P nmmtl_build_gnd_die_list(GND_DIE_LIST_P *head,
                                         DIELECTRICS_P dielectrics);
 
 /* nmmtl_charge.cxx */
-void nmmtl_charge(float *sigma_vector,
+void nmmtl_charge(double *sigma_vector,
 		  int conductor_counter,
 		  CONDUCTOR_DATA_P conductor_data,
-		  float *electrostatic_induction);
+		  double *electrostatic_induction);
 
-void nmmtl_charge_free_space(float *sigma_vector,
+void nmmtl_charge_free_space(double *sigma_vector,
 			     int conductor_counter,
 			     CONDUCTOR_DATA_P conductor_data,
-			     float *electrostatic_induction);
+			     double *electrostatic_induction);
 
 /* nmmtl_charimp_propvel_calculate.cxx */
 int nmmtl_charimp_propvel_calculate(int number_conductors,
                                     struct contour *signals,
-                                    float **electrostatic_induction,
-                                    float **inductance,
-                                    float **cap_abs_diel,
-                                    float *characteristic_impedance,
-                                    float *propagation_velocity,
-                                    float *equivalent_dielectric,
+                                    double **electrostatic_induction,
+                                    double **inductance,
+                                    double **cap_abs_diel,
+                                    double *characteristic_impedance,
+                                    double *propagation_velocity,
+                                    double *equivalent_dielectric,
                                     FILE *output_file1,
 				    FILE *output_file2);
 
@@ -861,7 +864,7 @@ int nmmtl_seg_in_die_rect(DIELECTRICS_P die_rect,LINESEG_P line);
 int nmmtl_circle_in_die_rect(DIELECTRICS_P die,POINT_P center,double radius);
 
 /* nmmtl_convert_units.cxx */
-int nmmtl_convert_units(float conversion,
+int nmmtl_convert_units(double conversion,
                                     struct dielectric *dielectrics,
                                     struct contour *signals,
                                     struct contour *groundwires);
@@ -879,8 +882,8 @@ int nmmtl_determine_intersections(LINE_SEGMENTS_P *line_segments,
 void nmmtl_dump(FILE *dump_file,
 		int cntr_seg,
 		int pln_seg,
-		float coupling,
-		float risetime,
+		double coupling,
+		double risetime,
 		struct contour *signals,
                 int conductor_counter,
                 CONDUCTOR_DATA_P conductor_data,
@@ -904,12 +907,12 @@ void nmmtl_dump_polygon(CONTOURS_P contour);
 void nmmtl_dump_circle(CONTOURS_P contour);
 
 void nmmtl_dump_geometry(int cntr_seg,int pln_seg,
-                         float coupling,float risetime,
-                         float conductivity,float frequency,
-                         float half_minimum_dimension,
+                         double coupling,double risetime,
+                         double conductivity,double frequency,
+                         double half_minimum_dimension,
                          int gnd_planes,
-                         float top_ground_plane_thickness,
-                         float bottom_ground_plane_thickness,
+                         double top_ground_plane_thickness,
+                         double bottom_ground_plane_thickness,
                          struct dielectric *dielectrics,
                          struct contour *signals,
                          struct contour *groundwires);
@@ -922,7 +925,7 @@ int nmmtl_dump_segments(DIELECTRIC_SEGMENTS_P ds,
 /* nmmtl_evaluate_circles.cxx */
 int nmmtl_evaluate_circles(int cntr_seg,
 #ifndef NO_HALF_MIN_CHECKING
-				       float half_minimum_dimension,
+				       double half_minimum_dimension,
 #endif
 				       int conductor_counter,
 				       CONTOURS_P contour,
@@ -945,7 +948,7 @@ int
 /* nmmtl_evaluate_polygons.cxx */
 int nmmtl_evaluate_polygons(int cntr_seg,
 #ifndef NO_HALF_MIN_CHECKING
-					float half_minimum_dimension,
+					double half_minimum_dimension,
 #endif
 					int conductor_counter,
 					CONTOURS_P contour,
@@ -955,7 +958,7 @@ int nmmtl_evaluate_polygons(int cntr_seg,
 /* nmmtl_evaluate_rectangles.cxx */
 int nmmtl_evaluate_rectangles(int cntr_seg,
 #ifndef NO_HALF_MIN_CHECKING
-					  float half_minimum_dimension,
+					  double half_minimum_dimension,
 #endif
 					  int conductor_counter,
 					  CONTOURS_P contour,
@@ -999,9 +1002,9 @@ int nmmtl_form_die_subseg(int plane_segments,
                                       SORTED_GND_DIE_LIST_P *upper_sorted_gdl);
 
 /* nmmtl_find_nu.cxx */
-float nmmtl_find_nu(float epsilon1,float epsilon2,float theta1,float theta2);
+double nmmtl_find_nu(double epsilon1,double epsilon2,double theta1,double theta2);
 
-float nmmtl_nu_function(float *nu);
+double nmmtl_nu_function(double *nu);
 
 /* nmmtl_intersections.c */
 POINT_P nmmtl_cd_intersect(CONTOURS_P this_contour,
@@ -1045,7 +1048,7 @@ int nmmtl_in_seg_range(LINESEG_P segment,double x,double y);
 
 /* nmmtl_evaluate_polygons.c */
 int nmmtl_evaluate_polygons(int cntr_seg,
-					float half_minimum_dimension,
+					double half_minimum_dimension,
 					int conductor_counter,
 					CONTOURS_P contour,
 					LINE_SEGMENTS_P *segments);
@@ -1168,8 +1171,8 @@ void nmmtl_interval_c(double x,
 		      CELEMENTS_P cel,
 		      double *value,
 		      int outer_cond_flag,
-		      float normalx,
-		      float normaly);
+		      double normalx,
+		      double normaly);
 
 void nmmtl_interval_self_c(double x,
 			   double y,
@@ -1193,16 +1196,16 @@ void nmmtl_interval_d(double x,
 		      DELEMENTS_P del,
 		      double *value,
 		      int outer_cond_flag,
-		      float normalx,
-		      float normaly);
+		      double normalx,
+		      double normaly);
 
 void nmmtl_interval_self_d(double x,
 			   double y,
 			   DELEMENTS_P del,
 			   double *value,
 			   double point,
-			   float normalx,
-			   float normaly);
+			   double normalx,
+			   double normaly);
 
 /* nmmtl_jacobian.cxx */
 void nmmtl_jacobian_d(double local,DELEMENTS_P del,double *Jacobian);
@@ -1210,11 +1213,11 @@ void nmmtl_jacobian_d(double local,DELEMENTS_P del,double *Jacobian);
 void nmmtl_jacobian_c(double local,CELEMENTS_P cel,double *Jacobian);
 
 /* nmmtl_load.cxx */
-void nmmtl_load(float *potential_vector,
+void nmmtl_load(double *potential_vector,
 		int conductor_number,
 		CONDUCTOR_DATA_P conductor_data);
 
-void nmmtl_load_free_space(float *potential_vector,
+void nmmtl_load_free_space(double *potential_vector,
 			   int conductor_number,
 			   CONDUCTOR_DATA_P conductor_data);
 
@@ -1236,8 +1239,8 @@ int
 
 /* nmmtl_nl_expand.cxx */
 void nmmtl_nl_expand(double xstart, double xend, double incr_start,
-		     float epsilonplus,
-                     float epsilonminus,float normaly,double y,
+		     double epsilonplus,
+                     double epsilonminus,double normaly,double y,
                      unsigned int *node_point_counter,
                      DELEMENTS_P *element_p,
                      int *number_elements,unsigned int common_node);
@@ -1250,17 +1253,17 @@ int nmmtl_orphans(CIRCLE_SEGMENTS_P *conductor_cs,
 			      DIELECTRIC_SEGMENTS_P *dielectric_segments);
 
 /* nmmtl_output_crosstalk.c */
-void nmmtl_output_crosstalk(FILE *output_fp, float **forward_xtk, 
-			    float **backward_xtk, struct contour *signals);
+void nmmtl_output_crosstalk(FILE *output_fp, double **forward_xtk, 
+			    double **backward_xtk, struct contour *signals);
 
 
 /* nmmtl_output_charimp_propvel.c */
 void nmmtl_output_charimp_propvel(FILE *output_fp, /* output file ptr */
 				  /* data to be output */
-				  float *characteristic_impedance,
-				  float *propagation_velocity,
-				  float *equivalent_dielectric,
-				  float even_odd[4],
+				  double *characteristic_impedance,
+				  double *propagation_velocity,
+				  double *equivalent_dielectric,
+				  double even_odd[4],
 				  /* signal line info */
 				  struct contour *signals);
 /* nmmtl_output_headers.cxx */
@@ -1269,14 +1272,14 @@ void nmmtl_output_headers(FILE *output_file,
 			  int num_signals,
 			  int num_grounds,
 			  int num_ground_planes,
-			  float coupling,
-			  float risetime,
+			  double coupling,
+			  double risetime,
 			  int cntr_seg,
 			  int pln_seg);
 
 /* nmmtl_output_matrices.cxx */
-void nmmtl_output_matrices(FILE *output_fp, float **electrostatic_induction,
-			   float **inductance, struct contour *signal);
+void nmmtl_output_matrices(FILE *output_fp, double **electrostatic_induction,
+			   double **inductance, struct contour *signal);
 
 /* nmmtl_overlap_parallel_set.cxx */
 int nmmtl_overlap_parallel_seg(struct dielectric_sub_segments *list1,
@@ -1287,11 +1290,11 @@ int nmmtl_overlap_parallel_seg(struct dielectric_sub_segments *list1,
 /* nmmtl_parse_graphic.cxx */
 int nmmtl_parse_graphic(char *filename,
 			int *cntr_seg,int *pln_seg,
-			float *coupling,float *risetime,
-			float *conductivity, float *frequency,
-			float *half_minimum_dimension,int *gnd_planes,
-			float *top_ground_plane_thickness,
-			float *bottom_ground_plane_thickness,
+			double *coupling,double *risetime,
+			double *conductivity, double *frequency,
+			double *half_minimum_dimension,int *gnd_planes,
+			double *top_ground_plane_thickness,
+			double *bottom_ground_plane_thickness,
 			struct dielectric **dielectrics,
 			struct contour **signals,
 			struct contour **groundwires,
@@ -1316,11 +1319,11 @@ int nmmtl_qsp_kernel(int conductor_counter,
 				 unsigned int node_point_counter,
 				 unsigned int highest_conductor_node,
 				 double length_scale,
-				 float **electrostatic_induction,
-				 float **inductance,
-				 float *characteristic_impedance,
-				 float *propagation_velocity,
-				 float *equivalent_dielectric,
+				 double **electrostatic_induction,
+				 double **inductance,
+				 double *characteristic_impedance,
+				 double *propagation_velocity,
+				 double *equivalent_dielectric,
 				 FILE *output_file1,
 				 FILE *output_file2,
 				 CONTOURS_P signals);
@@ -1329,8 +1332,8 @@ int nmmtl_qsp_kernel(int conductor_counter,
 int nmmtl_retrieve(FILE *retrieve_file,
 			       int *cntr_seg,
 			       int *pln_seg,
-			       float *coupling,
-			       float *risetime,
+			       double *coupling,
+			       double *risetime,
 			       CONTOURS_P *psignals,
 			       int *sig_cnt,
 			       int *pconductor_counter,
@@ -1348,8 +1351,8 @@ int nmmtl_set_offset(double offset,struct dielectric *dielectrics,
 void nmmtl_shape_c_edge(double point,
 			double *shape,
 			CELEMENTS_P cel,
-			float nu0,
-			float nu1);
+			double nu0,
+			double nu1);
 
 void nmmtl_shape(double point,
 		 double *shape);
@@ -1362,7 +1365,7 @@ void nmmtl_sort_gnd_die_list(GND_DIE_LIST_P lower_gdl_head,
 			     double left, double right);
 
 /* nmmtl_unload.cxx */
-void nmmtl_unload(float *potential_vector,
+void nmmtl_unload(double *potential_vector,
 		  int conductor_number,
 		  CONDUCTOR_DATA_P conductor_data);
 

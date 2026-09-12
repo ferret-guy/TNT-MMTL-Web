@@ -75,7 +75,7 @@
   number of segments to break a contour into
   
   -- No longer used --
-  float half_minimum_dimension
+  double half_minimum_dimension
   half of the smallest geometric dimension - used to determine if
   segments are broken small enough.
   -- --
@@ -121,7 +121,7 @@
 
 int nmmtl_evaluate_circles(int cntr_seg,
 #ifndef NO_HALF_MIN_CHECKING
-			   float half_minimum_dimension,
+			   double half_minimum_dimension,
 #endif
 			   int conductor_counter,
 			   CONTOURS_P contour,

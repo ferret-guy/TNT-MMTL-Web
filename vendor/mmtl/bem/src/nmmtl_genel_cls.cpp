@@ -135,11 +135,23 @@ int nmmtl_generate_elements_cls(LINE_SEGMENTS_P *clsp,
     y=cls->starty;
     
     firstelement = TRUE;
+    const unsigned int graded_total_divisions = divisions;
     
     /* loop based on a count of the number of divisions */
     
     while( divisions > 0 )
     {
+      // Algebraic panel endpoints cluster to fourth order at both corners.
+      // The quadratic element's midpoint remains its geometric midpoint.
+      const unsigned int graded_index = graded_total_divisions-divisions;
+      const double graded_t0=double(graded_index)/graded_total_divisions;
+      const double graded_t1=double(graded_index+1)/graded_total_divisions;
+      const double graded_u0 = pow(graded_t0,4)/(pow(graded_t0,4)+pow(1-graded_t0,4));
+      const double graded_u1 = pow(graded_t1,4)/(pow(graded_t1,4)+pow(1-graded_t1,4));
+      x=cls->startx+graded_u0*(cls->endx-cls->startx);
+      y=cls->starty+graded_u0*(cls->endy-cls->starty);
+      xhalfincr=(graded_u1-graded_u0)*(cls->endx-cls->startx)/2;
+      yhalfincr=(graded_u1-graded_u0)*(cls->endy-cls->starty)/2;
       if(start == NULL)  /* first time through */
       {
 	/* create the head of the list */

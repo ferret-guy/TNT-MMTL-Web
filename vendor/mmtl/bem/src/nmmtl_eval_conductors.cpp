@@ -87,7 +87,7 @@
   number of segments to break a contour into
   
   -- not used --
-  float half_minimum_dimension
+  double half_minimum_dimension
   half of the smallest geometric dimension - used to determine if
   segments are broken small enough.
   --  --
@@ -287,12 +287,12 @@ int nmmtl_evaluate_conductors(struct dielectric *dielectrics,
     LINE_SEGMENTS_P ls;
     DIELECTRIC_SEGMENTS_P ds;
     for(ls = *conductor_ls; ls != NULL; ls = ls->next)
-      fprintf(stderr,"LS c=%d (%.17g,%.17g)-(%.17g,%.17g) eps=[%.17g,%.17g] nu=[%.17g,%.17g] th2=[%.17g,%.17g] int=%d div=%d\n",
+      fprintf(stderr,"LS c=%d (%.17lg,%.17lg)-(%.17lg,%.17lg) eps=[%.17lg,%.17lg] nu=[%.17lg,%.17lg] th2=[%.17lg,%.17lg] int=%d div=%d\n",
               ls->conductor,ls->startx,ls->starty,ls->endx,ls->endy,
               ls->epsilon[0],ls->epsilon[1],ls->nu[0],ls->nu[1],
               ls->theta2[0],ls->theta2[1],ls->interior,ls->divisions);
     for(ds = *dielectric_segments; ds != NULL; ds = ds->next)
-      fprintf(stderr,"DS at=%.17g (%.17g..%.17g) eps+=%g eps-=%g eic=%d ori=%d div=%d\n",
+      fprintf(stderr,"DS at=%.17lg (%.17lg..%.17lg) eps+=%lg eps-=%lg eic=%d ori=%d div=%d\n",
               ds->at,ds->start,ds->end,ds->epsilonplus,ds->epsilonminus,
               (int)ds->end_in_conductor,(int)ds->orientation,ds->divisions);
   }
@@ -311,7 +311,7 @@ int nmmtl_evaluate_conductors(struct dielectric *dielectrics,
   fprintf(dump_file,"\n\nConductor Projections:\n  ");
   for(list = *cond_projections;list != NULL;list = list->next)
   {
-    fprintf(dump_file,"%g,",list->key);
+    fprintf(dump_file,"%lg,",list->key);
   }
   fprintf(dump_file,"\n");
 #endif

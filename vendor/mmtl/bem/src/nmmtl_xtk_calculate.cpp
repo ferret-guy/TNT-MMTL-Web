@@ -25,17 +25,17 @@
  *   INPUT PARAMETERS                                                        *
  *	int number_conductors,		    number of conductors	     *
  *	struct contour *signals,	    signal line info (names)	     *
- *	float **electrostatic_induction,    [B] matrix			     *
- *	float **inductance,		    [L] matrix			     *
- *	float coupling,			    coupling length		     *
- *	float risetime,			    signal risetime		     *
- *	float *propagation_velocity,	    propagation velocity	     *
+ *	double **electrostatic_induction,    [B] matrix			     *
+ *	double **inductance,		    [L] matrix			     *
+ *	double coupling,			    coupling length		     *
+ *	double risetime,			    signal risetime		     *
+ *	double *propagation_velocity,	    propagation velocity	     *
  *	FILE *output_file1,		    output file ptr #1		     *
  *	FILE *output_file2);		    output file ptr #2		     *
  *                                                                           *
  *   OUTPUT PARAMETERS                                                       *
- *	float **forward_xtk,		    forward crosstalk		     *
- *	float **backward_xtk,		    backward crosstalk		     *
+ *	double **forward_xtk,		    forward crosstalk		     *
+ *	double **backward_xtk,		    backward crosstalk		     *
  *                                                                           *
  *   USER FUNCTIONS & SYSTEM SERVICES CALLED                                 *
  *	dim2								     *
@@ -53,19 +53,19 @@
 
 int nmmtl_xtk_calculate(int number_conductors,
 				    struct contour *signals,
-				    float **electrostatic_induction,
-				    float **inductance,
-				    float coupling,
-				    float risetime,
-				    float *propagation_velocity,
-				    float **forward_xtk,
-				    float **backward_xtk,
+				    double **electrostatic_induction,
+				    double **inductance,
+				    double coupling,
+				    double risetime,
+				    double *propagation_velocity,
+				    double **forward_xtk,
+				    double **backward_xtk,
 				    FILE *output_file1,
 				    FILE *output_file2)
 {
-  float cap_coef;	/* Mutual Capacitance Coupling Coeficent (Kc) */
-  float ind_coef;	/* Mutual Inductive Coupling Coeficient (Kl)  */
-  float back_xtk_factor;  /* intermediate value for computing backward xtk */
+  double cap_coef;	/* Mutual Capacitance Coupling Coeficent (Kc) */
+  double ind_coef;	/* Mutual Inductive Coupling Coeficient (Kl)  */
+  double back_xtk_factor;  /* intermediate value for computing backward xtk */
   int i,j;
   
   /************************************************************************

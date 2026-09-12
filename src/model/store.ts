@@ -128,6 +128,8 @@ export function encodeConfig(s: AppState): string {
     const etch = etchReductionOf(p.w, p.etch);
     if (Number.isFinite(etch) && etch !== defs.etch)
       q.set('etch_delta', String(+etch.toPrecision(6)));
+    if (p.highAccuracy) q.set('refined_mesh', '1');
+    if (p.highAccuracy) q.set('refined_mesh', '1');
     if (p.cpwBottomGround !== defs.cpwBottomGround) q.set('cpw_bottom_gnd', p.cpwBottomGround ? '1' : '0');
     if (s.presetKind === 'stripline' && p.striplineSeparateMaterials) q.set('split_lam', '1');
     if (!p.referencePlaneSameWeight) {
@@ -197,6 +199,8 @@ export function decodeHash(hash: string): Partial<AppState> | null {
         const v = num(key);
         if (v !== null) (p[field] as number) = v;
       }
+      p.highAccuracy = kind === 'microstrip' && variant === 'se' && q.get('refined_mesh') === '1';
+      p.highAccuracy = kind === 'microstrip' && variant === 'se' && q.get('refined_mesh') === '1';
       p.striplineSeparateMaterials = kind === 'stripline' && q.get('split_lam') === '1';
       if (p.striplineSeparateMaterials) {
         if (!q.has('er2')) p.er2 = p.er;

@@ -107,19 +107,19 @@ void nmmtl_dump_elements(int conductor_counter,
     {
       for(i = 0; i < 3; i++)
       {
-	fprintf(dump_file,"        node %d, x=%f, y=%f, node=%d\n",
+	fprintf(dump_file,"        node %d, x=%lf, y=%lf, node=%d\n",
 		i,ce->xpts[i],ce->ypts[i],ce->node[i]);
       }
       
-      fprintf(dump_file,"        epsilon=%f",ce->epsilon);
+      fprintf(dump_file,"        epsilon=%lf",ce->epsilon);
       if(ce->edge[0])
       {
-	fprintf(dump_file," edge[0]: nu=%f, free_space_nu=%f,",
+	fprintf(dump_file," edge[0]: nu=%lf, free_space_nu=%lf,",
 		ce->edge[0]->nu,ce->edge[0]->free_space_nu);
       }
       if(ce->edge[1])
       {
-	fprintf(dump_file," edge[1]: nu=%f, free_space_nu=%f,",
+	fprintf(dump_file," edge[1]: nu=%lf, free_space_nu=%lf,",
 		ce->edge[1]->nu,ce->edge[1]->free_space_nu);
       }
       fputs("\n",dump_file);
@@ -132,13 +132,13 @@ void nmmtl_dump_elements(int conductor_counter,
   {
     for(i = 0; i < 3; i++)
     {
-      fprintf(dump_file,"        node %d, x=%f, y=%f, node=%d\n",
+      fprintf(dump_file,"        node %d, x=%lf, y=%lf, node=%d\n",
 	      i,die_elements->xpts[i],die_elements->ypts[i],
 	      die_elements->node[i]);
     }
-    fprintf(dump_file,"        epsilon(+)=%f, epsilon(-)=%f\n",
+    fprintf(dump_file,"        epsilon(+)=%lf, epsilon(-)=%lf\n",
 	    die_elements->epsilonplus,die_elements->epsilonminus);
-    fprintf(dump_file,"        normalx=%f, normaly=%f\n\n",
+    fprintf(dump_file,"        normalx=%lf, normaly=%lf\n\n",
 	    die_elements->normalx,die_elements->normaly);
   }    
   fputs("\n\nEnd of Element Dump\n",dump_file);

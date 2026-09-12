@@ -172,7 +172,10 @@ export function generateXsctn(s: Stackup): string {
     `set ::Stackup::frequency "1e9"\n` +
     `set ::Stackup::defaultLengthUnits "${s.units}"\n` +
     `set CSEG ${s.cseg}\n` +
-    `set DSEG ${s.dseg}\n\n`;
+    `set DSEG ${s.dseg}\n` +
+    (s.polygonEdgeSegments
+      ? `set EDGE_SEGMENTS ${s.polygonEdgeSegments.join(' ')}\n`
+      : '') + '\n';
 
   const body = s.items.map((item, i) => itemLines(item, i + 1)).join('');
   return head + body;
@@ -216,6 +219,10 @@ export function solverSignalBindings(s: Stackup): SolverSignalBinding[] {
 /** Basic validity checks mirroring solver requirements; returns error strings. */
 export function validateStackup(s: Stackup): string[] {
   const errs: string[] = [];
+  if (s.polygonEdgeSegments && (s.polygonEdgeSegments.length !== 4 ||
+      s.polygonEdgeSegments.some((v) => !Number.isInteger(v) || v < 2 || v > 1000))) {
+    errs.push('Polygon edge segments must contain four integers between 2 and 1000.');
+  }
   const grounds = s.items.filter((i) => i.kind === 'GroundPlane').length;
   const explicitGrounds = s.items
     .filter((i): i is ConductorItem => isConductor(i) && i.isGround)

@@ -151,7 +151,7 @@ int
       new_seg->divisions = plane_segments;
       new_seg->epsilon = dielectrics->constant;
 #ifdef DIAG_SUBSEG
-      printf("new top subsegment at %g over (%g,%g)\n",new_seg->at,
+      printf("new top subsegment at %lg over (%lg,%lg)\n",new_seg->at,
 	      new_seg->start,new_seg->end);
 #endif      
     }
@@ -175,7 +175,7 @@ int
       new_seg->divisions = plane_segments;
       new_seg->epsilon = dielectrics->constant;
 #ifdef DIAG_SUBSEG
-      printf("new bottom subsegment at %g over (%g,%g)\n",new_seg->at,
+      printf("new bottom subsegment at %lg over (%lg,%lg)\n",new_seg->at,
 	      new_seg->start,new_seg->end);
 #endif      
     }
@@ -226,7 +226,7 @@ int
       new_seg->divisions = plane_segments;
       new_seg->epsilon = dielectrics->constant;
 #ifdef DIAG_SUBSEG
-      printf("new right subsegment at %g over (%g,%g)\n",new_seg->at,
+      printf("new right subsegment at %lg over (%lg,%lg)\n",new_seg->at,
 	      new_seg->start,new_seg->end);
 #endif      
     }
@@ -245,7 +245,7 @@ int
       new_seg->divisions = plane_segments;
       new_seg->epsilon = dielectrics->constant;
 #ifdef DIAG_SUBSEG
-      printf("new left subsegment at %g over (%g,%g)\n",new_seg->at,
+      printf("new left subsegment at %lg over (%lg,%lg)\n",new_seg->at,
 	      new_seg->start,new_seg->end);
 #endif      
     } /* end new left segment */
