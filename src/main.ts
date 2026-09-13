@@ -812,7 +812,7 @@ async function doSolve() {
   solveStartedAt = performance.now();
   recordTelemetry('run-start', {generation, state: s, stackup});
   const meshSize = Math.max(stackup.cseg, stackup.dseg);
-  const initialSpeedup = crossOriginIsolated && meshSize >= 128 ? 4 : 1;
+  const initialSpeedup = crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined' ? 4 : 1;
   solveEta = new SolveWorkEta(measuredWorkCosts, [], Math.max(1, 1.06 * (meshSize / 45) ** 2 / initialSpeedup));
   solveProgressBar.value = 0;
   solveProgressPanel.classList.remove('d-none');
@@ -846,7 +846,7 @@ async function doSolve() {
     const solveWithProgress = async (input: string, cseg: number, dseg: number) => {
       const index = jobIndex++, job = jobs[index];
       solveEta.begin(index, (performance.now() - solveStartedAt) / 1000,
-        crossOriginIsolated && Math.max(cseg, dseg) >= 128 ? 'eigen' : 'serial');
+        crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined' ? 'eigen' : 'serial');
       const output = await client.solve(input, cseg, dseg, (_fraction, phase, _estimatedSeconds, work) => {
         if (generation !== solveGeneration || !work) return;
         solveEta.apply(work);

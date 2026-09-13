@@ -163,6 +163,18 @@ int nmmtl_qsp_kernel(int conductor_counter,
   #ifdef TNT_OPTIMIZED_LU
   printf("MMTL_LU Eigen-3.4.0 SIMD\n");
   #endif
+  // Reuse only when both operators, dimensions and edge exponents agree.
+  bool reuse_dielectric_lu = die_elements == NULL &&
+    node_point_counter == highest_conductor_node + 1;
+#if defined(BEM3_VARIANT) || defined(TRANSPOSE_ASSEMBLE) || !NSWC_LU_ROUTE
+  reuse_dielectric_lu = false;
+#endif
+  for (int c = 0; c <= conductor_counter; ++c)
+    for (CELEMENTS_P e = conductor_data[c].elements; e; e = e->next)
+      for (int k = 0; k < 2; ++k)
+        if (e->edge[k] && e->edge[k]->nu != e->edge[k]->free_space_nu)
+          reuse_dielectric_lu = false;
+  printf("MMTL_REUSE_ELIGIBLE %d\n", reuse_dielectric_lu ? 1 : 0);
   int ic, jc;
   int *ipvt;
   double **assemble_matrix;
@@ -553,6 +565,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
      Amn, LHS of matrix equation
      */
   
+  if (!reuse_dielectric_lu) {
   /* zero out portion of the matrix that was used above */
   
   for(i=0;i <= highest_conductor_node;i++)
@@ -665,6 +678,13 @@ int nmmtl_qsp_kernel(int conductor_counter,
   
 #endif /* #elif NSWC_LU_ROUTE */
   
+  } else {
+    printf("Calculate LHS (assemble) matrix in dielectric\n");
+    printf("MMTL_REUSE dielectric_matrix_and_lu\n");
+    // The existing LU and pivot vector remain valid for the dielectric RHS.
+    matrix_order = node_point_counter;
+  }
+
   /* do for each conductor being charged */
   
   for (activeLine = signals,ic = 1; 

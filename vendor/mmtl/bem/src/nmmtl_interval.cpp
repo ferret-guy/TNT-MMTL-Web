@@ -35,6 +35,146 @@
 
 #include "nmmtl.h"
 
+#include "interval_cache.h"
+#include <unordered_map>
+#include <vector>
+
+// Geometry-only data at the unchanged inner quadrature points. Keep Jacobian
+// separate so the integration retains its original floating-point operation order.
+struct NmmtlQuadraturePoint {
+  double x, y, shape[INTERP_PTS], weightedShape[INTERP_PTS], jacobian;
+};
+using NmmtlQuadrature = std::vector<NmmtlQuadraturePoint>;
+static thread_local bool interval_cache_active = false;
+static thread_local std::unordered_map<const void *, NmmtlQuadrature> interval_cache[3];
+void nmmtl_interval_cache_begin() {
+  for (auto &cache : interval_cache) cache.clear();
+  interval_cache_active = true;
+}
+void nmmtl_interval_cache_end() {
+  interval_cache_active = false;
+  for (auto &cache : interval_cache) cache.clear();
+}
+
+static const NmmtlQuadrature *quadrature_c(CELEMENTS_P cel) {
+  if (!interval_cache_active) return nullptr;
+  auto &cache = interval_cache[0];
+  auto found = cache.find(cel);
+  if (found != cache.end()) return &found->second;
+  NmmtlQuadrature points(Legendre_root_i_max);
+  for (int Legendre_counter=0; Legendre_counter<Legendre_root_i_max; ++Legendre_counter) {
+    int i; double X, Y, shape[INTERP_PTS], Jacobian, nu0, nu1;
+    nmmtl_shape(Legendre_root_i[Legendre_counter],shape);
+
+    /* interpolate x,y coordinate using no_edge shape function */
+    X = 0.0;
+    Y = 0.0;
+    for(i=0;i < INTERP_PTS;i++)
+    {
+      X += shape[i]*cel->xpts[i];
+      Y += shape[i]*cel->ypts[i];
+    }
+
+    nmmtl_jacobian_c(Legendre_root_i[Legendre_counter],cel,&Jacobian);
+    /* if an edge element - recalculate shape using edge effects */
+
+    if(cel->edge[0] != NULL || cel->edge[1] != NULL)
+    {
+      /* if given edge is really an edge, set the true value of nu,
+	 otherwise, don't really care */
+      nu0 = cel->edge[0] ? cel->edge[0]->nu : 0;
+      nu1 = cel->edge[1] ? cel->edge[1]->nu : 0;
+      nmmtl_shape_c_edge(Legendre_root_i[Legendre_counter],shape,cel,
+			 nu0,nu1);
+    }
+
+
+    auto &point=points[Legendre_counter];
+    point.x=X; point.y=Y; point.jacobian=Jacobian;
+    for (i=0;i<INTERP_PTS;++i) {
+      point.shape[i]=shape[i];
+      point.weightedShape[i]=Legendre_weight_i[Legendre_counter]*shape[i];
+    }
+  }
+  return &cache.emplace(cel,std::move(points)).first->second;
+}
+
+static const NmmtlQuadrature *quadrature_c_fs(CELEMENTS_P cel) {
+  if (!interval_cache_active) return nullptr;
+  auto &cache = interval_cache[1];
+  auto found = cache.find(cel);
+  if (found != cache.end()) return &found->second;
+  NmmtlQuadrature points(Legendre_root_i_max);
+  for (int Legendre_counter=0; Legendre_counter<Legendre_root_i_max; ++Legendre_counter) {
+    int i; double X, Y, shape[INTERP_PTS], Jacobian, nu0, nu1;
+    nmmtl_shape(Legendre_root_i[Legendre_counter],shape);
+
+    /* interpolate x,y coordinate using no_edge shape function */
+    X = 0.0;
+    Y = 0.0;
+    for(i=0;i < INTERP_PTS;i++)
+    {
+      X += shape[i]*cel->xpts[i];
+      Y += shape[i]*cel->ypts[i];
+    }
+
+    nmmtl_jacobian_c(Legendre_root_i[Legendre_counter],cel,&Jacobian);
+    /* if an edge element - recalculate shape using edge effects */
+
+    if(cel->edge[0] != NULL || cel->edge[1] != NULL)
+    {
+      /* if given edge is really an edge, set the true value of nu,
+	 otherwise, don't really care */
+      nu0 = cel->edge[0] ? cel->edge[0]->free_space_nu : 0;
+      nu1 = cel->edge[1] ? cel->edge[1]->free_space_nu : 0;
+      nmmtl_shape_c_edge(Legendre_root_i[Legendre_counter],shape,cel,
+			 nu0,nu1);
+    }
+
+
+    auto &point=points[Legendre_counter];
+    point.x=X; point.y=Y; point.jacobian=Jacobian;
+    for (i=0;i<INTERP_PTS;++i) {
+      point.shape[i]=shape[i];
+      point.weightedShape[i]=Legendre_weight_i[Legendre_counter]*shape[i];
+    }
+  }
+  return &cache.emplace(cel,std::move(points)).first->second;
+}
+
+static const NmmtlQuadrature *quadrature_d(DELEMENTS_P del) {
+  if (!interval_cache_active) return nullptr;
+  auto &cache = interval_cache[2];
+  auto found = cache.find(del);
+  if (found != cache.end()) return &found->second;
+  NmmtlQuadrature points(Legendre_root_i_max);
+  for (int Legendre_counter=0; Legendre_counter<Legendre_root_i_max; ++Legendre_counter) {
+    int i; double X, Y, shape[INTERP_PTS], Jacobian, nu0, nu1;
+    nmmtl_shape(Legendre_root_i[Legendre_counter],shape);
+
+    /* interpolate x,y coordinate using no_edge shape function */
+    X = 0.0;
+    Y = 0.0;
+    for(i=0;i < INTERP_PTS;i++)
+    {
+      X += shape[i]*del->xpts[i];
+      Y += shape[i]*del->ypts[i];
+    }
+
+    nmmtl_jacobian_d(Legendre_root_i[Legendre_counter],del,&Jacobian);
+
+
+    auto &point=points[Legendre_counter];
+    point.x=X; point.y=Y; point.jacobian=Jacobian;
+    for (i=0;i<INTERP_PTS;++i) {
+      point.shape[i]=shape[i];
+      point.weightedShape[i]=Legendre_weight_i[Legendre_counter]*shape[i];
+    }
+  }
+  return &cache.emplace(del,std::move(points)).first->second;
+}
+
+
 /*
  *******************************************************************
  **  STRUCTURE DECLARATIONS AND TYPE DEFINTIONS
@@ -114,6 +254,8 @@ void nmmtl_interval_c(double x,
 	double nu0,nu1;
   
   
+  const NmmtlQuadrature *quadrature=quadrature_c(cel);
+
   /* zero out output */
   for(i = 0; i < INTERP_PTS; i++)
     value[i] = 0.0;
@@ -121,6 +263,11 @@ void nmmtl_interval_c(double x,
   for(Legendre_counter = 0; Legendre_counter < Legendre_root_i_max;
       Legendre_counter++)
   {
+    if (quadrature) {
+      const auto &point=(*quadrature)[Legendre_counter];
+      X=point.x; Y=point.y; Jacobian=point.jacobian;
+      for (i=0;i<INTERP_PTS;++i) shape[i]=point.shape[i];
+    } else {
     nmmtl_shape(Legendre_root_i[Legendre_counter],shape);
     
     /* interpolate x,y coordinate using no_edge shape function */
@@ -145,27 +292,32 @@ void nmmtl_interval_c(double x,
 			 nu0,nu1);
     }
     
+    }
+
     dx1 = x - X;
     dy1 = y - Y;
-    d1 = sqrt(dx1*dx1 + dy1*dy1);
+    d1 = dx1*dx1 + dy1*dy1;
     
     dx2 = x - X; 
     dy2 = y + Y;
-    d2 = sqrt(dx2*dx2 + dy2*dy2);
+    d2 = dx2*dx2 + dy2*dy2;
     
     if(outer_cond_flag == TRUE)
     {
-      Greens_Function = log(d2/d1);
+      const double ratio = d2/d1;
+      Greens_Function = (ratio > 0.0 && isfinite(ratio))
+        ? 0.5*log(ratio) : log(sqrt(d2)/sqrt(d1));
     }
     else
     {
-      Greens_Function = ( dx1*normalx + dy1*normaly ) / ( d1*d1 ) -
-	( dx2*normalx + dy2*normaly ) / ( d2*d2 );
+      Greens_Function = ( dx1*normalx + dy1*normaly ) / d1 -
+	( dx2*normalx + dy2*normaly ) / d2;
     }
     
     for(i=0;i < INTERP_PTS;i++)
     {
-      value[i] += Legendre_weight_i[Legendre_counter] * shape[i] * 
+      value[i] += (quadrature ? (*quadrature)[Legendre_counter].weightedShape[i]
+                  : Legendre_weight_i[Legendre_counter] * shape[i]) *
 	Greens_Function * Jacobian;
     }
   } /* for all Legendre roots */
@@ -393,6 +545,8 @@ void nmmtl_interval_c_fs(double x,
 	double nu0,nu1;
   
   
+  const NmmtlQuadrature *quadrature=quadrature_c_fs(cel);
+
   /* zero out output */
   for(i = 0; i < INTERP_PTS; i++)
     value[i] = 0.0;
@@ -400,6 +554,11 @@ void nmmtl_interval_c_fs(double x,
   for(Legendre_counter = 0; Legendre_counter < Legendre_root_i_max;
       Legendre_counter++)
   {
+    if (quadrature) {
+      const auto &point=(*quadrature)[Legendre_counter];
+      X=point.x; Y=point.y; Jacobian=point.jacobian;
+      for (i=0;i<INTERP_PTS;++i) shape[i]=point.shape[i];
+    } else {
     nmmtl_shape(Legendre_root_i[Legendre_counter],shape);
     
     /* interpolate x,y coordinate using no_edge shape function */
@@ -424,19 +583,24 @@ void nmmtl_interval_c_fs(double x,
 			 nu0,nu1);
     }
     
+    }
+
     dx1 = x - X;
     dy1 = y - Y;
-    d1 = sqrt(dx1*dx1 + dy1*dy1);
+    d1 = dx1*dx1 + dy1*dy1;
     
     dx2 = x - X; 
     dy2 = y + Y;
-    d2 = sqrt(dx2*dx2 + dy2*dy2);
+    d2 = dx2*dx2 + dy2*dy2;
     
-    Greens_Function = log(d2/d1);
+    const double ratio = d2/d1;
+      Greens_Function = (ratio > 0.0 && isfinite(ratio))
+        ? 0.5*log(ratio) : log(sqrt(d2)/sqrt(d1));
     
     for(i=0;i < INTERP_PTS;i++)
     {
-      value[i] += Legendre_weight_i[Legendre_counter] * shape[i] * 
+      value[i] += (quadrature ? (*quadrature)[Legendre_counter].weightedShape[i]
+                  : Legendre_weight_i[Legendre_counter] * shape[i]) *
 	Greens_Function * Jacobian;
     }
   } /* for all Legendre roots */
@@ -674,6 +838,8 @@ void nmmtl_interval_d(double x,
 	double Greens_Function;
   
   
+  const NmmtlQuadrature *quadrature=quadrature_d(del);
+
   /* zero out output */
   for(i = 0; i < INTERP_PTS; i++)
     value[i] = 0.0;
@@ -681,6 +847,11 @@ void nmmtl_interval_d(double x,
   for(Legendre_counter = 0; Legendre_counter < Legendre_root_i_max;
       Legendre_counter++)
   {
+    if (quadrature) {
+      const auto &point=(*quadrature)[Legendre_counter];
+      X=point.x; Y=point.y; Jacobian=point.jacobian;
+      for (i=0;i<INTERP_PTS;++i) shape[i]=point.shape[i];
+    } else {
     nmmtl_shape(Legendre_root_i[Legendre_counter],shape);
     
     /* interpolate x,y coordinate using no_edge shape function */
@@ -694,28 +865,33 @@ void nmmtl_interval_d(double x,
     
     nmmtl_jacobian_d(Legendre_root_i[Legendre_counter],del,&Jacobian);
     
+    }
+
     dx1 = x - X;
     dy1 = y - Y;
-    d1 = sqrt(dx1*dx1 + dy1*dy1);
+    d1 = dx1*dx1 + dy1*dy1;
     
     dx2 = x - X; 
     dy2 = y + Y;
-    d2 = sqrt(dx2*dx2 + dy2*dy2);
+    d2 = dx2*dx2 + dy2*dy2;
     
     if(outer_cond_flag == TRUE)
     {
-      Greens_Function = log(d2/d1);
+      const double ratio = d2/d1;
+      Greens_Function = (ratio > 0.0 && isfinite(ratio))
+        ? 0.5*log(ratio) : log(sqrt(d2)/sqrt(d1));
     }
     else
     {
-      Greens_Function = ( dx1*normalx + dy1*normaly ) / ( d1*d1 ) -
-	( dx2*normalx + dy2*normaly ) / ( d2*d2 );
+      Greens_Function = ( dx1*normalx + dy1*normaly ) / d1 -
+	( dx2*normalx + dy2*normaly ) / d2;
     }
     
     
     for(i=0;i < INTERP_PTS;i++)
     {
-      value[i] += Legendre_weight_i[Legendre_counter] * shape[i] * 
+      value[i] += (quadrature ? (*quadrature)[Legendre_counter].weightedShape[i]
+                  : Legendre_weight_i[Legendre_counter] * shape[i]) *
 	Greens_Function * Jacobian;
     }
   } /* for all Legendre roots */

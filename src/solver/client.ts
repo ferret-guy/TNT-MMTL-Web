@@ -20,9 +20,9 @@ interface Pending {
 // Public WASM assets keep stable filenames in both Vite development and the
 // static build. Tie their cache key to the native build so an already-open
 // browser cannot keep an older solver after bem.wasm is rebuilt.
-const BEM_ASSET_REVISION = '40a599fda8c9c8c2';
+const BEM_ASSET_REVISION = '2c46600a103a5305';
 
-const BEM_THREADED_ASSET_REVISION = 'd54a5eb34a68e3a4';
+const BEM_THREADED_ASSET_REVISION = '3d1923243e04cd11';
 
 function versionedBemUrl(threaded = false): string {
   const url = new URL(

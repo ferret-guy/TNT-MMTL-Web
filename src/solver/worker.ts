@@ -109,9 +109,11 @@ async function solveOnce(
     });
   };
   let mod: BemModule;
-  // Small meshes avoid pool startup; unsupported hosts use the serial asset.
+  // Requested segment counts do not reflect the generated matrix size (e.g. CPWG).
+  // Always enable the threaded backend when supported; native assembly decides
+  // whether each actual matrix is large enough to benefit from multiple workers.
   const useThreads = threadedBemUrl && self.crossOriginIsolated
-    && typeof SharedArrayBuffer !== 'undefined' && Math.max(req.cseg, req.dseg) >= 128;
+    && typeof SharedArrayBuffer !== 'undefined';
   if (useThreads) {
     try { mod = await instantiate(threadedBemUrl!); }
     catch { mod = await instantiate(bemUrl); }

@@ -20,6 +20,7 @@ export class WorkTracker {
     constructor(backend = 'serial', maxThreads = 4) {
         this.maxThreads = maxThreads;
         this.freeNodes = 0;
+        this.reuseMatrix = false;
         this.backend = backend;
         this.c = 0;
         this.n = 0;
@@ -38,6 +39,7 @@ export class WorkTracker {
         if (!Number.isFinite(at) || at < this.at) return;
         this.at = at;
         let m;
+        if (line.startsWith("MMTL_REUSE_ELIGIBLE ")) this.reuseMatrix = line.endsWith("1");
         if ((m = line.match(/(\d+) elements and (\d+) nodes were generated/))) {
             this.n = +m[1];
             this.nodes = +m[2];
@@ -87,7 +89,7 @@ export class WorkTracker {
         this.boundaries[stage] = at;
     }
     shape() {
-        return { c: this.c, n: this.n, nodes: this.nodes, signals: this.signals, backend: this.backend, threads: this.threads };
+        return { reuseMatrix: this.reuseMatrix, c: this.c, n: this.n, nodes: this.nodes, signals: this.signals, backend: this.backend, threads: this.threads };
     }
 }
 /** Phase costs: setup, free assembly/LU/RHS, dielectric assembly/LU/RHS.
@@ -104,7 +106,7 @@ export function costs(shape, model, first = false) {
     const lu = x => m.lu[0] * x ** 3 + m.lu[1] * x * x;
     const solve = x => m.solve[0] * x * x * ns + m.solve[1];
     return [m.setup[0] + (first ? m.setup[1] : 0), cold * m.assembly[0] * c * c / threads[0], lu((shape.freeNodes || 2 * shape.c) / 1000), solve((shape.freeNodes || 2 * shape.c) / 1000),
-        cold * (n === c ? m.assembly[0] * n * n : m.dielectric[0] * c * n + m.dielectric[1] * (n - c) * n) / threads[1], lu(nd), solve(nd)];
+        shape.reuseMatrix ? 0 : cold * (n === c ? m.assembly[0] * n * n : m.dielectric[0] * c * n + m.dielectric[1] * (n - c) * n) / threads[1], shape.reuseMatrix ? 0 : lu(nd), solve(nd)];
 }
 export class SolveWorkEta {
     constructor(model, roles, initialSeconds = 1, settlingSeconds = DEFAULT_SETTLING_SECONDS) {

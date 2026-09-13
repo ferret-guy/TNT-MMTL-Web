@@ -24,8 +24,7 @@
     "benchmark:eta:record": "node tests/benchmarks/eta/serve.mjs",
     "benchmark:eta:replay": "python tests/benchmarks/eta/validate.py && python tests/benchmarks/eta/fit.py && node tests/benchmarks/eta/replay.mjs",
     "benchmark:eta:sweep": "node tests/benchmarks/eta/sweep.mjs",
-    "benchmark:eta:report": "python tests/benchmarks/eta/report.py",
-    "benchmark:eta:devices": "npm run build && node tests/benchmarks/eta/devices-server.mjs"
+    "benchmark:eta:report": "python tests/benchmarks/eta/report.py"
   },
   "devDependencies": {
     "@types/bootstrap": "^5.2.11",

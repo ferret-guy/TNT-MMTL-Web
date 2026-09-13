@@ -48,3 +48,15 @@ test('entering the air pass cannot temporarily borrow the large dielectric mesh'
  eta.feed('MMTL_PROGRESS assembly 0 100',.02);
  eta.begin(1,10,'serial');assert.ok(eta.read(10).remaining<1);
 });
+
+test('explicit operator reuse removes only repeated assembly and LU costs',()=>{
+ const t=new WorkTracker('eigen');
+ t.feed('MMTL_REUSE_ELIGIBLE 1',0);
+ t.c=1000;t.n=1000;t.nodes=2000;
+ const reused=costs(t,model);
+ assert.equal(reused[4],0);assert.equal(reused[5],0);
+ assert.ok(reused[1]>0&&reused[2]>0&&reused[6]>0);
+ assert.equal(t.shape().reuseMatrix,true);
+ t.feed('MMTL_REUSE_ELIGIBLE 0',1);
+ assert.ok(costs(t,model)[4]>0&&costs(t,model)[5]>0);
+});

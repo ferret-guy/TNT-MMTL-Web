@@ -26,6 +26,7 @@
 
 #include "nmmtl.h"
 #include "parallel_assembly.h"
+#include "interval_cache.h"
 
 /*
  *******************************************************************
@@ -103,6 +104,7 @@ void nmmtl_assemble(int conductor_counter,
     for (CELEMENTS_P e = conductor_data[c].elements; e; e = e->next) ++progress_total;
   for (DELEMENTS_P e = die_elements; e; e = e->next) ++progress_total;
   nmmtl_parallel_assembly(progress_total, [&](NmmtlAssemblyPartition &partition) {
+  NmmtlIntervalCacheScope cache_scope;
   int i,j,cond_num,inner_cond_num;
   CELEMENTS_P cel,inner_cel;
   DELEMENTS_P del,inner_del;

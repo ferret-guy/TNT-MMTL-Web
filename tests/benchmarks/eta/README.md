@@ -47,14 +47,10 @@ Validation excludes an entire guided geometry/mode family, including its About e
 Reports retain median, P90, maximum error, and finish-time corrections. Errors use total actual solve time as denominator and the middle 80% of elapsed time as the measurement window. Estimates are unrounded for algorithm comparisons; the application retains whole-second display formatting. The raw startup data remains available and is not included in a claim about middle-of-run accuracy.
 
 
-## Other devices (HTTP LAN collector)
+## Existing device recordings
 
-Run `npm run benchmark:eta:devices`. Open the printed LAN URL on each device, name the device, and choose **Start / resume benchmark**. Keep the benchmark visible. The page uploads each case automatically. **Device results** opens the central live report. **New run** starts a separate recording without replacing older data.
+Previously collected device traces remain in `build/eta-devices/<run-id>/` and use the same raw format as local recordings. The LAN collector has been removed. Recordings retain browser and isolation metadata; plain HTTP LAN captures use serial WASM and do not validate threaded performance on other hardware.
 
-Plain HTTP on non-localhost origins disables SharedArrayBuffer in ordinary browsers, so those runs use serial WASM. Localhost can use the threaded/Eigen backend. The recordings retain isolation status, browser, logical CPU count, visibility interruptions, every native event, and exact inputs. Compare like backends; HTTP results do not validate the threaded path on other hardware.
+Acceptance by actual duration: under 10 seconds is ungraded; 10-30 seconds allows up to 50% error; 30-60 seconds is informational; above 60 seconds uses stripline <10% and freeform <25% targets.
 
-The server binds port 5182 and serves a frozen copy of the production build. It keeps device runs in `build/eta-devices/<run-id>/`, with source snapshots and build hashes. Its connection token is scoped to this collector and persists across restarts. It does not serve arbitrary workspace files. The raw case files use the same format as the local replay tool. Validate a device directory, extract it, and replay with fixed reference rates to measure transfer; fitting on the target device first is calibration, not held-out device validation.
-
-Acceptance by actual duration: under 10 seconds is ungraded; 10-30 seconds allows up to 50% error; 30-60 seconds is informational; above 60 seconds uses the stripline <10% and freeform <25% targets. All raw errors remain available. This dataset contains no >60-second stripline run on the original machine; that target still needs sufficiently slow/device stress measurements.
-
-`ETA_TIME_SCALE` optionally scales all recorded clocks for a synthetic speed-adaptation check. This does not reproduce another device's kernel ratios, thread count, thermal throttling, or browser scheduling, and is not hardware validation.
+`ETA_TIME_SCALE` scales recorded clocks for a synthetic speed-adaptation check, not hardware validation.
