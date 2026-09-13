@@ -1,3 +1,6 @@
+#ifdef TNT_OPTIMIZED_LU
+#include "optimized_lu.h"
+#endif
 
 /* 
   
@@ -25,6 +28,12 @@
  */
 
 #include "nmmtl.h"
+// Prototype telemetry: no changes to numerical operations.
+extern "C" int nmmtlprogresslu_(int *k, int *n) {
+  printf("MMTL_PROGRESS factorization %d %d\n", *k, *n);
+  return 0;
+}
+
 
 /* 
  *******************************************************************
@@ -37,6 +46,13 @@
  *******************************************************************
  */
 
+#ifdef TNT_OPTIMIZED_LU
+#define TNT_LU_FACTOR tnt_lu_factor
+#define TNT_LU_SOLVE tnt_lu_solve
+#else
+#define TNT_LU_FACTOR lu_factor
+#define TNT_LU_SOLVE lu_solve_linear
+#endif
 #define no_condition_number yes
 
 /* 
@@ -144,6 +160,9 @@ int nmmtl_qsp_kernel(int conductor_counter,
 				 CONTOURS_P signals)
 {
 
+  #ifdef TNT_OPTIMIZED_LU
+  printf("MMTL_LU Eigen-3.4.0 SIMD\n");
+  #endif
   int ic, jc;
   int *ipvt;
   double **assemble_matrix;
@@ -260,7 +279,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
      */
   
 #ifdef no_condition_number
-  lu_factor(&matrix_order,assemble_matrix[0], assemble_matrix[0],
+  TNT_LU_FACTOR(&matrix_order,assemble_matrix[0], assemble_matrix[0],
 		 (int *) &node_point_counter,ipvt,&int_status);
   // int_status will always be returned as SUCCESS, but check in case
   // someone changes this.
@@ -360,7 +379,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
       *          
       */
     
-    lu_solve_linear(&matrix_order,assemble_matrix[0],sigma_vector,
+    TNT_LU_SOLVE(&matrix_order,assemble_matrix[0],sigma_vector,
 		    potential_vector,(int *) &node_point_counter,ipvt,
 		    &int_status);
     // int_status will always be returned as SUCCESS, but check in case
@@ -606,7 +625,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
   
 
 #ifdef no_condition_number
-  lu_factor(&matrix_order,assemble_matrix[0], assemble_matrix[0],
+  TNT_LU_FACTOR(&matrix_order,assemble_matrix[0], assemble_matrix[0],
 		 (int *) &node_point_counter,ipvt,&int_status);
   // int_status will always be returned as SUCCESS, but check in case
   // someone changes this.
@@ -706,7 +725,7 @@ int nmmtl_qsp_kernel(int conductor_counter,
       *          
       */
     
-    lu_solve_linear(&matrix_order,assemble_matrix[0],sigma_vector,
+    TNT_LU_SOLVE(&matrix_order,assemble_matrix[0],sigma_vector,
 		    potential_vector,(int *)&node_point_counter,ipvt,
 		    &int_status);
     

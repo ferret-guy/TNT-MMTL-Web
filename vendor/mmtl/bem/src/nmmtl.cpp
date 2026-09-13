@@ -81,7 +81,7 @@ FILE *dump_file;  /* a file for diagnostics */
 
 #include "legendre.h"  /* define the Legendre polynomials as globals */
 
-int nmmtl_fpe_handler_argument = NMMTL_FPE_OTHER;
+thread_local int nmmtl_fpe_handler_argument = NMMTL_FPE_OTHER;
 char *range_value; /* for test function range_int */
 
 /*

@@ -53,6 +53,7 @@ C
 C
 C     GAUSSIAN ELIMINATION WITH PARTIAL PIVOTING
 C
+      CALL NMMTLPROGRESSLU(0,N)
       INFO = 0
       NM1 = N - 1
       IF (NM1 .LT. 1) GO TO 70
@@ -95,9 +96,11 @@ C
    40    CONTINUE
             INFO = K
    50    CONTINUE
+         CALL NMMTLPROGRESSLU(K,N)
    60 CONTINUE
    70 CONTINUE
       IPVT(N) = N
       IF (A(N,N) .EQ. 0.0E0) INFO = N
+      CALL NMMTLPROGRESSLU(N,N)
       RETURN
       END

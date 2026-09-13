@@ -32,6 +32,7 @@
             <div class="tab-pane fade" id="tab-freeform" role="tabpanel"></div>
           </div>
 
+          <p class="small text-body-secondary mt-3 mb-1">Start with 45 mesh segments for quick solves. For precision work, use 400 conductor and dielectric segments in Advanced; for single-ended microstrip, also enable “Refined mesh and wider domain.” Compare successive refinements to check convergence.</p>
           <div class="d-flex gap-2 mt-3 align-items-center">
             <button class="btn btn-primary" id="btn-solve">
               <span class="spinner-border spinner-border-sm d-none" id="solve-spinner"></span>
@@ -40,6 +41,10 @@
             <span class="small text-body-secondary" id="solver-status">solver: loading...</span>
             <button class="btn btn-outline-danger d-none" id="btn-cancel">Cancel</button>
             <span class="small text-body-secondary" id="solve-note"></span>
+          </div>
+          <div id="solve-progress" class="mt-2 d-none">
+            <div class="small mb-1"><span id="solve-progress-label" aria-live="polite">Preparing solve</span><span id="solve-elapsed"></span></div>
+            <progress id="solve-progress-bar" max="100" value="0" aria-label="Solve progress" style="width:100%;height:16px;accent-color:var(--bs-primary)"></progress>
           </div>
         </div>
 

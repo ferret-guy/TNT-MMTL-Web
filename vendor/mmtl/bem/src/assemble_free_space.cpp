@@ -25,6 +25,7 @@
  */
 
 #include "nmmtl.h"
+#include "parallel_assembly.h"
 
 /*
  *******************************************************************
@@ -95,6 +96,10 @@ void nmmtl_assemble_free_space(int conductor_counter,
 			       double **assemble_matrix)
 {
   
+  int progress_total = 0;
+  for (int c = 0; c <= conductor_counter; ++c)
+    for (CELEMENTS_P e = conductor_data[c].elements; e; e = e->next) ++progress_total;
+  nmmtl_parallel_assembly(progress_total, [&](NmmtlAssemblyPartition &partition) {
   int i,j,cond_num,inner_cond_num;
   CELEMENTS_P cel,inner_cel;
   int Legendre_counter;
@@ -115,6 +120,7 @@ void nmmtl_assemble_free_space(int conductor_counter,
     cel=conductor_data[cond_num].elements;
     while(cel != NULL)
     {
+      if (!partition.touches(cel->node)) { cel = cel->next; continue; }
       for(Legendre_counter = 0; Legendre_counter < Legendre_root_a_max;
 	  Legendre_counter++)
       {
@@ -162,7 +168,7 @@ void nmmtl_assemble_free_space(int conductor_counter,
 	    nmmtl_interval_c_fs(x,y,inner_cel,value);
 	    
 	    /* now add in the contributions to the the basis points */
-	    for(i=0;i < INTERP_PTS;i++)
+	    for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	    {
 	      for(j=0;j < INTERP_PTS;j++)
 	      {
@@ -189,7 +195,7 @@ void nmmtl_assemble_free_space(int conductor_counter,
 	    nmmtl_interval_c_fs(x,y,inner_cel,value);
 	  
 	  /* now add in the contributions to the the basis points */
-	  for(i=0;i < INTERP_PTS;i++)
+	  for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	  {
 	    for(j=0;j < INTERP_PTS;j++)
 	    {
@@ -213,7 +219,7 @@ void nmmtl_assemble_free_space(int conductor_counter,
 	    nmmtl_interval_c_fs(x,y,inner_cel,value);
 	    
 	    /* now add in the contributions to the the basis points */
-	    for(i=0;i < INTERP_PTS;i++)
+	    for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	    {
 	      for(j=0;j < INTERP_PTS;j++)
 	      {
@@ -228,11 +234,13 @@ void nmmtl_assemble_free_space(int conductor_counter,
 	
       } /* while stepping through Guass-Legendre roots */
       
+      partition.advance(cel->node, progress_total);
       cel = cel->next;
       
     } /* while outer looping on elments of a conductor */
   } /* while outer looping on conductors */
   
+  });
 }
 
 

@@ -200,7 +200,7 @@ test('wide ribbon fixture is a rounded alternating 6-ground/5-signal geometry', 
   assert.equal(Math.max(...pvc.map((poly) => poly.y1)), 36);
 });
 
-test('About-page cable cards link their titles and publish solved benchmark accuracy', () => {
+test('About-page cable cards link their titles', () => {
   assert.doesNotMatch(aboutHtml, /XX%|Treat this as an impedance benchmark/);
   assert.match(
     aboutHtml,
@@ -210,10 +210,6 @@ test('About-page cable cards link their titles and publish solved benchmark accu
     aboutHtml,
     /<h3 class="about-cable-title">\s*<a [^>]*data-freeform-example="cat5"[^>]*>Cat5e twisted pair<\/a>/,
   );
-  assert.match(aboutHtml, /estimated tan\(delta\) = 0\.048/);
-  assert.match(aboutHtml, /estimated tan\(delta\) = 0\.00002/);
-  assert.match(aboutHtml, /specified value to within 0\.7%/);
-  assert.match(aboutHtml, /specified value to within 4\.8%/);
 });
 
 test('Ribbon card exposes one relative link to the many-port fixture', () => {

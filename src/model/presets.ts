@@ -136,6 +136,7 @@ export function defaultParams(kind: PresetKind, variant: PresetVariant): PresetP
     cpwBottomGround: true,
     cseg: 45,
     dseg: 45,
+    highAccuracy: false,
     couplingLengthM: 0.0254, // 1 inch
     riseTimePs: 100,
   };

@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>400-cell solve progress prototype</title>
+<style>body{font:17px system-ui;color:#193047;background:#f4f7fa;max-width:820px;margin:55px auto;padding:24px}main{background:white;padding:30px;border-radius:12px}progress{width:100%;height:28px;accent-color:#087fc5}button{padding:10px 20px;font:inherit;margin:12px 8px 12px 0}#phase,#elapsed,#metrics{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums}#phase{margin-bottom:8px}#metrics{white-space:pre-wrap;line-height:1.7}small{color:#546575}</style></head>
+<body><main><h1>400-cell solve progress</h1><p>Refined microstrip · Nan Ya NP-155F · 400 conductor / 400 dielectric segmentation settings</p>
+<p><small>Local prototype. Progress advances only when solver work completes. Overall percentage uses estimated phase weights; it is not a promised time remaining.</small></p>
+<button id="start">Run solve</button><button id="cancel" disabled>Cancel</button>
+<p id="phase" aria-live="polite">Ready</p><progress id="bar" value="0" max="100" aria-label="Overall solve progress"></progress>
+<p id="elapsed">0 s elapsed</p><p id="metrics"></p>
+<a href="./">Back to calculator</a></main><script type="module" src="/src/progressPrototype.ts"></script></body></html>

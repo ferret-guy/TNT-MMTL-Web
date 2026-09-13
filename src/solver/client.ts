@@ -16,14 +16,16 @@ interface Pending {
 // Public WASM assets keep stable filenames in both Vite development and the
 // static build. Tie their cache key to the native build so an already-open
 // browser cannot keep an older solver after bem.wasm is rebuilt.
-const BEM_ASSET_REVISION = '40bed117be471580';
+const BEM_ASSET_REVISION = '40a599fda8c9c8c2';
 
-function versionedBemUrl(): string {
+const BEM_THREADED_ASSET_REVISION = 'd54a5eb34a68e3a4';
+
+function versionedBemUrl(threaded = false): string {
   const url = new URL(
-    `${import.meta.env.BASE_URL}wasm/bem.mjs`,
+    `${import.meta.env.BASE_URL}wasm/${threaded ? 'threaded/' : ''}bem.mjs`,
     document.baseURI,
   );
-  url.searchParams.set('v', BEM_ASSET_REVISION);
+  url.searchParams.set('v', threaded ? BEM_THREADED_ASSET_REVISION : BEM_ASSET_REVISION);
   return url.href;
 }
 
@@ -44,6 +46,7 @@ export class SolverClient {
     w.postMessage({
       cmd: 'init',
       bemUrl: versionedBemUrl(),
+      threadedBemUrl: versionedBemUrl(true),
     });
     w.onmessage = (ev) => this.dispatch(ev.data);
     w.onerror = (ev) => {

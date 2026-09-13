@@ -215,7 +215,7 @@ void nmmtl_interval_self_c(double x,
 	double alpha; /* coeficient for interval splitting */
 	double local_coord;
 	double nu0,nu1;
-  extern int nmmtl_fpe_handler_argument;
+  extern thread_local int nmmtl_fpe_handler_argument;
   
   /* set up specific floating point divide-by-zero error handling */
   nmmtl_fpe_handler_argument = NMMTL_FPE_ELETOOSMALL;
@@ -490,7 +490,7 @@ void nmmtl_interval_self_c_fs(double x,
 	double alpha; /* coeficient for interval splitting */
 	double local_coord;
 	double nu0,nu1;
-  extern int nmmtl_fpe_handler_argument;
+  extern thread_local int nmmtl_fpe_handler_argument;
   
   /* set up specific floating point divide-by-zero error handling */
   nmmtl_fpe_handler_argument = NMMTL_FPE_ELETOOSMALL;
@@ -767,7 +767,7 @@ void nmmtl_interval_self_d(double x,
 	double Greens_Function;
 	double alpha; /* coeficient for interval splitting */
 	double local_coord;
-  extern int nmmtl_fpe_handler_argument;
+  extern thread_local int nmmtl_fpe_handler_argument;
   
   /* set up specific floating point divide-by-zero error handling */
   nmmtl_fpe_handler_argument = NMMTL_FPE_ELETOOSMALL;

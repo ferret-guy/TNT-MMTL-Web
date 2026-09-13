@@ -479,3 +479,11 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Stable progress readouts: separate rows prevent phase text moving the timer. */
+#solve-progress-label, #solve-elapsed {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  min-height: 1.5em;
+}

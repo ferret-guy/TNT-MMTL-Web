@@ -1,3 +1,4 @@
+import { ProgressEta, formatEta } from './solver/progressEta.ts';
 /**
  * App bootstrap: wiring between store, solver client, and UI panels.
  */
@@ -722,6 +723,27 @@ const btnCancel = $('#btn-cancel') as HTMLButtonElement;
 const spinner = $('#solve-spinner');
 const solveNote = $('#solve-note');
 let solveGeneration = 0;
+const solveProgressPanel = $('#solve-progress');
+const solveProgressBar = $('#solve-progress-bar') as HTMLProgressElement;
+const solveProgressLabel = $('#solve-progress-label');
+const solveElapsed = $('#solve-elapsed');
+let solveProgressTimer: number | undefined;
+let solveStartedAt = 0;
+let solveEta = new ProgressEta(0);
+function finishSolveProgress(label: string) {
+  window.clearInterval(solveProgressTimer);
+  solveElapsed.textContent = `${Math.floor((performance.now() - solveStartedAt) / 1000)} s`;
+  solveProgressLabel.textContent = label;
+}
+const solvePhaseLabels: Record<string, string> = {
+  initializing: 'Preparing mesh', meshing: 'Meshing',
+  'free-space-assembly': 'Assembling free-space matrix',
+  'free-space-factorization': 'Factoring free-space matrix',
+  'free-space-solves': 'Solving free-space currents',
+  'dielectric-assembly': 'Assembling dielectric matrix',
+  'dielectric-factorization': 'Factoring dielectric matrix',
+  'dielectric-solves': 'Solving currents', finalizing: 'Finishing results', complete: 'Finishing results',
+};
 
 function capacitanceMatrixInOrder(
   result: SolveResult,
@@ -782,17 +804,54 @@ async function doSolve() {
   btnSolve.disabled = true;
   spinner.classList.remove('d-none');
   btnCancel.classList.toggle('d-none', false);
+  window.clearInterval(solveProgressTimer);
+  solveStartedAt = performance.now();
+  const meshSize = Math.max(stackup.cseg, stackup.dseg);
+  const initialSpeedup = crossOriginIsolated && meshSize >= 128 ? 4 : 1;
+  solveEta = new ProgressEta(solveStartedAt, Math.max(1, 1.06 * (meshSize / 45) ** 2 / initialSpeedup));
+  solveProgressBar.value = 0;
+  solveProgressPanel.classList.remove('d-none');
+  solveProgressLabel.textContent = 'Preparing mesh';
+  solveElapsed.textContent = `0 s elapsed · ${formatEta(solveEta.remainingSeconds(solveStartedAt))}`;
+  solveProgressTimer = window.setInterval(() => {
+    solveElapsed.textContent = `${Math.floor((performance.now() - solveStartedAt) / 1000)} s elapsed · ${formatEta(solveEta.remainingSeconds(performance.now()))}`;
+  }, 100);
   try {
     const explicitPreparation = isExplicitReferenceStackup(stackup)
       ? prepareExplicitReferenceStackup(stackup)
       : null;
     const nativeStackup = explicitPreparation?.solverStackup ?? stackup;
     const xsctn = generateXsctn(nativeStackup);
+    // Reserve progress for all native passes so page-load work does not
+    // reach 100% before current and dielectric-loss calculations finish.
+    let plannedParticipation = null;
+    try {
+      if (s.mode === 'freeform') plannedParticipation = dielectricParticipationPerturbation(nativeStackup);
+    } catch { /* The existing loss-analysis error handler reports this later. */ }
+    const needsAir = !explicitPreparation || generateXsctn(freeSpaceStackup(nativeStackup)) !== xsctn;
+    const jobs = [{ label: 'Impedance', weight: 1 },
+      ...(needsAir ? [{ label: 'Current and loss', weight: 0.05 }] : []),
+      ...(plannedParticipation ? [{ label: 'Dielectric loss 1/2', weight: 1 }, { label: 'Dielectric loss 2/2', weight: 1 }] : [])];
+    const totalWeight = jobs.reduce((sum, job) => sum + job.weight, 0);
+    let jobIndex = 0, finishedWeight = 0;
+    const solveWithProgress = (input: string, cseg: number, dseg: number) => {
+      const job = jobs[jobIndex++];
+      const lower = finishedWeight / totalWeight;
+      finishedWeight += job.weight;
+      const span = job.weight / totalWeight;
+      return client.solve(input, cseg, dseg, (fraction, phase) => {
+        if (generation !== solveGeneration) return;
+        const value = 99.99 * (lower + span * fraction);
+        solveProgressBar.value = Math.max(solveProgressBar.value, value);
+        solveEta.update(solveProgressBar.value / 100, performance.now());
+        solveProgressLabel.textContent = `${Math.min(99.9, solveProgressBar.value).toFixed(1)}% · ${job.label}: ${solvePhaseLabels[phase ?? 'initializing']}`;
+      });
+    };
     const solveKey = `${xsctn}|${nativeStackup.cseg}|${nativeStackup.dseg}`;
     // mark this input as handled even if it fails: auto-solve must not
     // retry an unchanged config in a loop
     lastSolveKey = solveKey;
-    const rawOut = await client.solve(
+    const rawOut = await solveWithProgress(
       xsctn,
       nativeStackup.cseg,
       nativeStackup.dseg,
@@ -806,7 +865,7 @@ async function doSolve() {
       const airXsctn = generateXsctn(airStackup);
       if (airXsctn !== xsctn) {
         solveNote.textContent = 'calculating free-space current basis...';
-        freeSpaceOut = await client.solve(
+        freeSpaceOut = await solveWithProgress(
           airXsctn,
           airStackup.cseg,
           airStackup.dseg,
@@ -867,7 +926,7 @@ async function doSolve() {
       try {
         solveNote.textContent = 'calculating mesh surface-current loss...';
         const airStackup = freeSpaceStackup(stackup);
-        freeSpaceOut = await client.solve(
+        freeSpaceOut = await solveWithProgress(
           generateXsctn(airStackup),
           airStackup.cseg,
           airStackup.dseg,
@@ -896,7 +955,7 @@ async function doSolve() {
         const perturbation = dielectricParticipationPerturbation(nativeStackup);
         if (perturbation) {
           solveNote.textContent = 'calculating dielectric energy participation...';
-          const positiveOut = await client.solve(
+          const positiveOut = await solveWithProgress(
             generateXsctn(perturbation.positiveStackup),
             perturbation.positiveStackup.cseg,
             perturbation.positiveStackup.dseg,
@@ -908,7 +967,7 @@ async function doSolve() {
               'The positive dielectric participation solve failed.',
             );
           }
-          const negativeOut = await client.solve(
+          const negativeOut = await solveWithProgress(
             generateXsctn(perturbation.negativeStackup),
             perturbation.negativeStackup.cseg,
             perturbation.negativeStackup.dseg,
@@ -999,6 +1058,10 @@ async function doSolve() {
     });
   } finally {
     if (generation !== solveGeneration) return;
+    if (store.get().lastSolve?.ok) {
+      solveProgressBar.value = 100;
+      finishSolveProgress('Complete');
+    } else finishSolveProgress('Solve failed');
     btnSolve.disabled = false;
     spinner.classList.add('d-none');
     btnCancel.classList.add('d-none');
@@ -1149,6 +1212,7 @@ btnCancel.addEventListener('click', () => {
   spinner.classList.add('d-none');
   btnCancel.classList.add('d-none');
   solveNote.textContent = 'cancelled';
+  finishSolveProgress('Cancelled');
 });
 
 /* ---------------- results + log ---------------- */

@@ -127,3 +127,26 @@ snapshot, retained the standard `float.h` headers, and completed the constant an
 output-precision changes. Historical vendor goldens remain unchanged: intentional
 model/numerical changes should be evaluated using independent physics checks and
 matched native/WASM comparisons, not by rewriting historical results blindly.
+
+
+## Parallel assembly and progress telemetry
+
+The optional Emscripten pthread build partitions both assembly routines by
+32-column blocks. Each column has one writer; elements crossing a block boundary
+are evaluated by both owners, each writing only its own columns. All quadrature
+and accumulation order within a matrix entry are unchanged. The interval
+exception-context variable is thread-local. Worker-local counters report completed
+elements through atomics; only the coordinating solver thread writes progress to
+stdout, avoiding pthread filesystem proxy deadlocks. Assembly and LU progress
+callbacks also remain available in the serial build.
+
+
+## Optimized LU backend
+
+The threaded WebAssembly build uses Eigen 3.4.0 blocked partial-pivot LU with
+128-bit SIMD and in-place column-major storage. Its solve wrapper applies the
+Eigen row transpositions and unit-lower/upper triangular solves together;
+LINPACK factor and solve formats are never mixed. Singular and nonfinite factors
+fail explicitly. The serial compatibility build and native builds keep LINPACK.
+Only the Eigen translation unit enables SIMD, without fast-math or relaxed SIMD.
+The original dense matrix is retained only by an opt-in residual-validation build.

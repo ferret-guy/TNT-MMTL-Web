@@ -25,6 +25,7 @@
  */
 
 #include "nmmtl.h"
+#include "parallel_assembly.h"
 
 /*
  *******************************************************************
@@ -97,6 +98,11 @@ void nmmtl_assemble(int conductor_counter,
 		    double **assemble_matrix)
 {
   
+  int progress_total = 0;
+  for (int c = 0; c <= conductor_counter; ++c)
+    for (CELEMENTS_P e = conductor_data[c].elements; e; e = e->next) ++progress_total;
+  for (DELEMENTS_P e = die_elements; e; e = e->next) ++progress_total;
+  nmmtl_parallel_assembly(progress_total, [&](NmmtlAssemblyPartition &partition) {
   int i,j,cond_num,inner_cond_num;
   CELEMENTS_P cel,inner_cel;
   DELEMENTS_P del,inner_del;
@@ -118,6 +124,7 @@ void nmmtl_assemble(int conductor_counter,
     cel=conductor_data[cond_num].elements;
     while(cel != NULL)
     {
+      if (!partition.touches(cel->node)) { cel = cel->next; continue; }
       for(Legendre_counter = 0; Legendre_counter < Legendre_root_a_max;
 	  Legendre_counter++)
       {
@@ -166,7 +173,7 @@ void nmmtl_assemble(int conductor_counter,
 	    nmmtl_interval_c(x,y,inner_cel,value,TRUE,0,0);
 	    
 	    /* now add in the contributions to the the basis points */
-	    for(i=0;i < INTERP_PTS;i++)
+	    for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	      for(j=0;j < INTERP_PTS;j++)
 	      {
 #ifdef BEM3_VARIANT
@@ -199,7 +206,7 @@ void nmmtl_assemble(int conductor_counter,
 	    nmmtl_interval_c(x,y,inner_cel,value,TRUE,0,0);
 	  
 	  /* now add in the contributions to the the basis points */
-	  for(i=0;i < INTERP_PTS;i++)
+	  for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	    for(j=0;j < INTERP_PTS;j++)
 	    {
 #ifdef BEM3_VARIANT
@@ -231,7 +238,7 @@ void nmmtl_assemble(int conductor_counter,
 	    nmmtl_interval_c(x,y,inner_cel,value,TRUE,0,0);
 	    
 	    /* now add in the contributions to the the basis points */
-	    for(i=0;i < INTERP_PTS;i++)
+	    for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	      for(j=0;j < INTERP_PTS;j++)
 	      {
 #ifdef BEM3_VARIANT
@@ -260,7 +267,7 @@ void nmmtl_assemble(int conductor_counter,
 	  nmmtl_interval_d(x,y,inner_del,value,TRUE,0,0);
 	  
 	  /* now add in the contributions to the the basis points */
-	  for(i=0;i < INTERP_PTS;i++)
+	  for(i=0;i < INTERP_PTS;i++) if (partition.owns(cel->node[i]))
 	    for(j=0;j < INTERP_PTS;j++)
 	    {
 #ifdef BEM3_VARIANT
@@ -280,6 +287,7 @@ void nmmtl_assemble(int conductor_counter,
 	
       } /* while stepping through Guass-Legendre roots */
       
+      partition.advance(cel->node, progress_total);
       cel = cel->next;
       
     } /* while outer looping on elments of a conductor */
@@ -291,6 +299,7 @@ void nmmtl_assemble(int conductor_counter,
   del = die_elements;
   while(del != NULL)
   {
+    if (!partition.touches(del->node)) { del = del->next; continue; }
 #ifdef BEM3_VARIANT
     coef2 = length_scale * (del->epsilonplus - del->epsilonminus) * 
       ASSEMBLE_CONST_1 * 1.0e+6;
@@ -322,7 +331,7 @@ void nmmtl_assemble(int conductor_counter,
       
       /* first one double integral */
       
-      for(i=0;i < INTERP_PTS;i++)
+      for(i=0;i < INTERP_PTS;i++) if (partition.owns(del->node[i]))
 	for(j=0;j < INTERP_PTS;j++)
 	  assemble_matrix[del->node[j]][del->node[i]] +=
 	    coef1 * Legendre_weight_a[Legendre_counter] *
@@ -349,7 +358,7 @@ void nmmtl_assemble(int conductor_counter,
 			     del->normaly);
 	    
 	    /* now add in the contributions to the the basis points */
-	    for(i=0;i < INTERP_PTS;i++)
+	    for(i=0;i < INTERP_PTS;i++) if (partition.owns(del->node[i]))
 	      for(j=0;j < INTERP_PTS;j++)
 	      {
 		assemble_matrix[inner_cel->node[j]][del->node[i]] +=
@@ -381,7 +390,7 @@ void nmmtl_assemble(int conductor_counter,
 	  }
 	  
 	  /* now add in the contributions to the the basis points */
-	  for(i=0;i < INTERP_PTS;i++)
+	  for(i=0;i < INTERP_PTS;i++) if (partition.owns(del->node[i]))
 	    for(j=0;j < INTERP_PTS;j++)
 	    {
 	      assemble_matrix[inner_del->node[j]][del->node[i]] +=
@@ -394,9 +403,11 @@ void nmmtl_assemble(int conductor_counter,
       } /* if coef2 != 0.0 */
       
     } /* while stepping through Guass-Legendre roots */
+    partition.advance(del->node, progress_total);
     del = del->next;
     
   } /* while outer looping on die elements */
+  });
 }
 
 

@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import {pathToFileURL} from 'node:url';
+const root='D:/Dropbox/MENGR Share Folder/TRL-Cal';
+process.env.C21_MMTL_WASM_DIR=root+'/deliverables/C21_mmtl_convergence/numerical_recipe_v1/wasm_q24_local_si';
+const {solveMicrostrip}=await import(pathToFileURL(root+'/tools/c21_mmtl_bridge_candidate.mjs'));
+const m=JSON.parse(fs.readFileSync('build/convergence-100/manifest.json','utf8'));
+const b=m.rows[0].baseline;
+const r=await solveMicrostrip(b.width_mm,b.config);
+const check={oldSolverCapacitance:r.capacitanceFPerM,cachedCapacitance:b.C_F_m,exactMatch:r.capacitanceFPerM===b.C_F_m,elapsedMs:r.elapsedMs};
+fs.writeFileSync('build/convergence-100/reference-replay.json',JSON.stringify(check,null,2));
+console.log(check);
+if(!check.exactMatch)process.exitCode=1;

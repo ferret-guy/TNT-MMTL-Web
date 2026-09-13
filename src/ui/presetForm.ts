@@ -333,8 +333,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
               <input class="form-check-input" type="checkbox" id="pf-high-accuracy" ${p.highAccuracy ? 'checked' : ''}>
               <label class="form-check-label small" for="pf-high-accuracy">Refined mesh and wider domain</label>
             </div>
-            <p class="small text-body-secondary mt-1 mb-0">Starts at 400 segments with extra corner resolution. Solves may take minutes; compare refinements for your geometry.</p>` : ''}
-            <p class="small text-body-secondary mt-2 mb-0">45 segments is the interactive starting point. Increase the mesh to check convergence.</p>
+            <p class="small text-body-secondary mt-1 mb-0">Precision-work option: sets both meshes to 400 segments, adds corner resolution, and widens the domain. Solves may take minutes.</p>` : ''}
           </div>
         </div>
       </div>

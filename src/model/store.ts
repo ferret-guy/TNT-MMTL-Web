@@ -420,6 +420,16 @@ class Store {
     this.state = hasHashConfig
       ? this.loadFromUrl() ?? defaultState()
       : this.load() ?? defaultState();
+    if (!hasHashConfig) {
+      // A fresh calculator visit should not silently resume an expensive mesh.
+      // Explicit shared configurations still retain their requested settings.
+      this.state.presetParams = {
+        ...this.state.presetParams, cseg: 45, dseg: 45, highAccuracy: false,
+      };
+      this.state.freeform = {
+        ...this.state.freeform, cseg: 45, dseg: 45, polygonEdgeSegments: undefined,
+      };
+    }
   }
 
   /** a config in the URL hash wins over localStorage (shared links) */

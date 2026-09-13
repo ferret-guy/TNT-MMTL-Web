@@ -9,6 +9,7 @@
  *   -> { id, cmd: 'goalSeek', spec }        (see analysis/goalSeek.ts)
  *   <- { id, evt: 'iter', ... } progress events, then { id, done: true, ... }
  */
+import { FineProgressTracker } from './fineProgress.ts';
 import { parseResult } from './parseResult.mjs';
 import { parseFieldPlot } from './parseFieldPlot.mjs';
 import {
@@ -19,7 +20,6 @@ import {
 } from '../field/potential.ts';
 import { runGoalSeek, type GoalSeekSpec } from '../analysis/goalSeek.ts';
 import {
-  SolveProgressTracker,
   type SolveProgress,
 } from './solveProgress.ts';
 
@@ -29,8 +29,10 @@ import {
 // (which knows the real document base) sends the URL in an init message.
 let bemUrl = new URL('/wasm/bem.mjs', self.location.href).href; // dev fallback
 
-function versionedWasmUrl(): string {
-  const moduleUrl = new URL(bemUrl);
+let threadedBemUrl: string | undefined;
+
+function versionedWasmUrl(url: string): string {
+  const moduleUrl = new URL(url);
   const wasmUrl = new URL('bem.wasm', moduleUrl);
   // new URL('bem.wasm', moduleUrl) intentionally replaces the filename and
   // would otherwise drop the revision query carried by bem.mjs.
@@ -46,16 +48,16 @@ interface BemModule {
     chdir(p: string): void;
   };
   callMain(args: string[]): number;
+  PThread?: { terminateAllThreads(): void };
 }
 
-let factory: ((opts: object) => Promise<BemModule>) | null = null;
-
-async function getFactory() {
-  if (!factory) {
-    const mod = await import(/* @vite-ignore */ bemUrl);
-    factory = mod.default;
+const factories = new Map<string, (opts: object) => Promise<BemModule>>();
+async function getFactory(url: string) {
+  if (!factories.has(url)) {
+    const mod = await import(/* @vite-ignore */ url);
+    factories.set(url, mod.default);
   }
-  return factory!;
+  return factories.get(url)!;
 }
 
 export interface SolveRequest {
@@ -70,68 +72,87 @@ async function solveOnce(
 ) {
   const t0 = performance.now();
   const stdout: string[] = [];
-  const progressTracker = new SolveProgressTracker();
-  onProgress?.({ fraction: 0.01, phase: 'initializing' });
-  const create = await getFactory();
-  const mod = await create({
-    print: (s: string) => {
-      stdout.push(s);
-      const progress = progressTracker.feed(s);
-      if (progress) onProgress?.(progress);
-    },
-    printErr: (s: string) => {
-      stdout.push(s);
-      const progress = progressTracker.feed(s);
-      if (progress) onProgress?.(progress);
-    },
-    locateFile: (f: string, prefix: string) =>
-      f.endsWith('.wasm') ? versionedWasmUrl() : prefix + f,
-  });
-  mod.FS.mkdir('/work');
-  mod.FS.writeFile('/work/case.xsctn', req.xsctn);
-  mod.FS.chdir('/work');
-  let exitCode = 0;
-  let error: string | undefined;
-  try {
-    exitCode = mod.callMain(['/work/case', String(req.cseg), String(req.dseg)]);
-  } catch (e) {
-    const err = e as { name?: string; status?: number; message?: string };
-    if (err?.name === 'ExitStatus') exitCode = err.status ?? 1;
-    else error = err?.message ?? String(e);
-  }
-  const log = stdout.join('\n');
-  const ok = !error && log.includes('MMTL is done');
-  let resultText: string | null = null;
-  let fieldText: string | null = null;
-  try {
-    resultText = mod.FS.readFile('/work/case.result', { encoding: 'utf8' });
-  } catch {
-    /* no result file */
-  }
-  try {
-    fieldText = mod.FS.readFile('/work/case.result_field_plot_data', { encoding: 'utf8' });
-  } catch {
-    /* no field file */
-  }
-  let result = null;
-  let parseError: string | undefined;
-  if (ok && resultText) {
-    try {
-      result = parseResult(resultText);
-    } catch (e) {
-      parseError = `result parse failed: ${(e as Error).message}`;
-    }
-  }
-  return {
-    ok: ok && !!result,
-    exitCode,
-    stdout: log,
-    resultText,
-    fieldText,
-    elapsedMs: Math.round(performance.now() - t0),
-    result,
-    error: error ?? parseError,
+  const fineTracker = new FineProgressTracker(req.cseg >= 200);
+  const phases: SolveProgress['phase'][] = ['meshing', 'free-space-assembly',
+    'free-space-factorization', 'free-space-solves', 'dielectric-assembly',
+    'dielectric-factorization', 'finalizing'];
+  const progressTracker = { feed: (line: string): SolveProgress | null => {
+    const p = fineTracker.feed(line);
+    return p ? { fraction: p.fraction, phase: p.fraction === 1 ? 'complete' : phases[p.stage] } : null;
+  } };
+  onProgress?.({ fraction: 0, phase: 'initializing' });
+  const instantiate = async (url: string) => {
+    const create = await getFactory(url);
+    return create({
+      print: (s: string) => {
+        stdout.push(s);
+        const progress = progressTracker.feed(s);
+        if (progress) onProgress?.(progress);
+      },
+      printErr: (s: string) => {
+        stdout.push(s);
+        const progress = progressTracker.feed(s);
+        if (progress) onProgress?.(progress);
+      },
+      locateFile: (f: string, prefix: string) =>
+        f.endsWith('.wasm') ? versionedWasmUrl(url) : prefix + f,
+    });
   };
+  let mod: BemModule;
+  // Small meshes avoid pool startup; unsupported hosts use the serial asset.
+  const useThreads = threadedBemUrl && self.crossOriginIsolated
+    && typeof SharedArrayBuffer !== 'undefined' && Math.max(req.cseg, req.dseg) >= 128;
+  if (useThreads) {
+    try { mod = await instantiate(threadedBemUrl!); }
+    catch { mod = await instantiate(bemUrl); }
+  } else { mod = await instantiate(bemUrl); }
+  try {
+    mod.FS.mkdir('/work');
+    mod.FS.writeFile('/work/case.xsctn', req.xsctn);
+    mod.FS.chdir('/work');
+    let exitCode = 0;
+    let error: string | undefined;
+    try {
+      exitCode = mod.callMain(['/work/case', String(req.cseg), String(req.dseg)]);
+    } catch (e) {
+      const err = e as { name?: string; status?: number; message?: string };
+      if (err?.name === 'ExitStatus') exitCode = err.status ?? 1;
+      else error = err?.message ?? String(e);
+    }
+    const log = stdout.join('\n');
+    const ok = !error && log.includes('MMTL is done');
+    let resultText: string | null = null;
+    let fieldText: string | null = null;
+    try {
+      resultText = mod.FS.readFile('/work/case.result', { encoding: 'utf8' });
+    } catch {
+      /* no result file */
+    }
+    try {
+      fieldText = mod.FS.readFile('/work/case.result_field_plot_data', { encoding: 'utf8' });
+    } catch {
+      /* no field file */
+    }
+    let result = null;
+    let parseError: string | undefined;
+    if (ok && resultText) {
+      try {
+        result = parseResult(resultText);
+      } catch (e) {
+        parseError = `result parse failed: ${(e as Error).message}`;
+      }
+    }
+    return {
+      ok: ok && !!result,
+      exitCode,
+      stdout: log,
+      resultText,
+      fieldText,
+      elapsedMs: Math.round(performance.now() - t0),
+      result,
+      error: error ?? parseError,
+    };
+  } finally { mod.PThread?.terminateAllThreads(); }
 }
 
 self.onmessage = async (ev: MessageEvent) => {
@@ -139,7 +160,8 @@ self.onmessage = async (ev: MessageEvent) => {
   try {
     if (msg.cmd === 'init') {
       bemUrl = msg.bemUrl;
-      factory = null; // re-import against the new URL if needed
+      threadedBemUrl = msg.threadedBemUrl;
+      factories.clear();
       return;
     }
     if (msg.cmd === 'solve') {

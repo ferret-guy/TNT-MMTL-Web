@@ -4,8 +4,10 @@ export type SolveProgressPhase =
   | 'meshing'
   | 'free-space-assembly'
   | 'free-space-solves'
+  | 'free-space-factorization'
   | 'dielectric-assembly'
   | 'dielectric-solves'
+  | 'dielectric-factorization'
   | 'finalizing'
   | 'complete';
 
