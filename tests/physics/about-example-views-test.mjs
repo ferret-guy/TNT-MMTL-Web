@@ -49,6 +49,7 @@ const {
 const {
   groundCurrentAlignmentOffsetModelUnits,
   groundCurrentDisplayPeak,
+  groundCurrentDrivenPolygons,
   groundCurrentMagnitudePercent,
   groundCurrentSmoothedFaceMagnitudes,
   groundCurrentSurfaceFaceRuns,
@@ -481,6 +482,17 @@ function assertCurrentDistribution(model, geometry, distribution, driveTotalA) {
     distribution.planes.length + (distribution.surfaces?.length ?? 0) > 0,
     `${model.label} has no return-current surfaces`,
   );
+  const obstacles = groundCurrentDrivenPolygons(geometry, distribution);
+  assert.equal(obstacles.length, distribution.signals.length,
+    `${model.label}: clearance must use solved signal conductors only`);
+  assert.ok(obstacles.every(poly => !poly.isGroundConductor));
+  if (model.explicit) {
+    assert.deepEqual(
+      obstacles.map(poly => geometry.signalNames[poly.signalIndex]).sort(),
+      distribution.signals.map(signal => signal.label).sort(),
+      `${model.label}: no reduced return conductor may constrain its own ribbon`,
+    );
+  }
   for (const signal of distribution.signals) {
     assert.ok(
       [signal.centerM, signal.widthM, signal.currentA].every(Number.isFinite),

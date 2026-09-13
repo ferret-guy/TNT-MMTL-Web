@@ -122,8 +122,8 @@ export function renderContoursInto(
 
 /**
  * E-field streamlines: start just off the driven conductor (seeded along the
- * phi = seedLevel equipotential), integrate along E = -grad(phi) — i.e.
- * perpendicular to the equipotentials — until the line lands on ground
+ * phi = seedLevel equipotential), integrate along E = -grad(phi) - i.e.
+ * perpendicular to the equipotentials - until the line lands on ground
  * (phi -> 0), another conductor (masked cell), or leaves the view.
  */
 export function streamlinePaths(

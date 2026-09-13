@@ -81,7 +81,7 @@ function persistable(s: AppState) {
  * freeform mode carries it as URI-encoded JSON in `stack=`.
  */
 
-/** [urlKey, presetParams field, unit note] — plain numeric params */
+/** [urlKey, presetParams field, unit note] - plain numeric params */
 const NUM_PARAMS: Array<[string, keyof PresetParams]> = [
   ['w', 'w'],
   ['s', 's'],

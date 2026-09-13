@@ -8,7 +8,7 @@ passes the golden gate.
 If f2c ever becomes a liability (e.g. source changes introduce Fortran
 constructs f2c mishandles), the alternative is George Stagg's patched LLVM
 Flang targeting `wasm32-unknown-emscripten`, per
-https://gws.phd/posts/fortran_wasm/ — prebuilt toolchain published at
+https://gws.phd/posts/fortran_wasm/ - prebuilt toolchain published at
 `ghcr.io/r-wasm/flang-wasm` (used by webR to build BLAS/LAPACK for wasm).
 
 Sketch (Docker Desktop required):
@@ -32,7 +32,7 @@ ABI notes (both paths agree with the codebase's `-DFORTRAN_UNDERBARS`):
 - symbol naming: trailing underscore (`sgefa_`)
 - all arguments passed by reference
 - REAL function results return `float` (matches our patched `extern "C" int`
-  subroutine declarations; flang subroutines return void — if switching,
+  subroutine declarations; flang subroutines return void - if switching,
   revert patch #3 in PATCHES.md for the flang build or keep a shim)
 - COMPLEX values: struct-of-two, 4-byte alignment
 

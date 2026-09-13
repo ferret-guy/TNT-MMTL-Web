@@ -32,6 +32,7 @@ const {
   formatGroundCurrentPercent,
   groundCurrentAlignmentOffsetModelUnits,
   groundCurrentDisplayPeak,
+  groundCurrentDrivenPolygons,
   groundCurrentInterpolatedPercent,
   groundCurrentMagnitudePercent,
   groundCurrentSharedAmplitudePixels,
@@ -1038,3 +1039,55 @@ test('coplanar geometry has no fabricated plane-current plot', () => {
     null,
   );
 });
+
+ test('floating-pair return wire does not constrain its own current ribbon clearance', () => {
+  const geometry = computeGeometry({
+    title: 'Cat5e', units: 'mils', cseg: 45, dseg: 45,
+    items: [{kind: 'CircleConductors', id: 'Pair', isGround: false,
+      conductivity: 52000000, number: 2, pitch: 35.03937007874016,
+      xOffset: 7.460629921259844, yOffset: 7.460629921259844,
+      diameter: 20.118110236220474}],
+  });
+  const conductors = geometry.polys.filter(p => p.kind === 'conductor');
+  assert.equal(conductors.length, 2);
+  for (const driven of conductors) {
+    const distribution = {signals: [{label: geometry.signalNames[driven.signalIndex]}]};
+    const obstacles = groundCurrentDrivenPolygons(geometry, distribution);
+    assert.deepEqual(obstacles, [driven]);
+    const returning = conductors.find(p => p !== driven);
+    const gap = Math.max(driven.x0 - returning.x1, returning.x0 - driven.x1);
+    assert.ok(gap > 14, 'clearance is the inter-wire gap, not zero self-clearance');
+  }
+  assert.deepEqual(groundCurrentDrivenPolygons(geometry, {
+    signals: geometry.signalNames.map(label => ({label})),
+  }), conductors, 'a two-driven-line mode retains both obstacles');
+ });
+
+ test('clearance excludes grounded rails for all guided geometries and modes', () => {
+  for (const kind of ['microstrip', 'stripline', 'cpw']) {
+    for (const variant of ['se', 'diff']) {
+      const geometry = computeGeometry(buildPreset(kind, variant, defaultParams(kind, variant)));
+      const signals = geometry.signalNames.map(label => ({label})).reverse();
+      const obstacles = groundCurrentDrivenPolygons(geometry, {signals});
+      assert.equal(obstacles.length, variant === 'diff' ? 2 : 1, `${kind}-${variant}`);
+      assert.ok(obstacles.every(poly => !poly.isGroundConductor));
+      assert.deepEqual(obstacles.map(p => geometry.signalNames[p.signalIndex]).sort(),
+        signals.map(s => s.label).sort());
+    }
+  }
+ });
+ test('mixed freeform shapes and multiple reduced returns resolve by signal identity', () => {
+  const common = {isGround: false, conductivity: 58000000, number: 1, pitch: 0, yOffset: 0};
+  const geometry = computeGeometry({title: 'Mixed conductors', units: 'mils', cseg: 45, dseg: 45,
+    items: [
+      {...common, kind: 'RectangleConductors', id: 'R', xOffset: 0, width: 8, height: 2},
+      {...common, kind: 'TrapezoidConductors', id: 'T', xOffset: 20, bottomWidth: 8, topWidth: 6, height: 2},
+      {...common, kind: 'CircleConductors', id: 'C', xOffset: 40, diameter: 8},
+      {...common, kind: 'RectangleConductors', id: 'G', isGround: true, xOffset: 60, width: 8, height: 2},
+    ]});
+  for (const indices of [[0], [1], [2], [2, 0], [1, 2], [2, 1, 0]]) {
+    const signals = indices.map(i => ({label: geometry.signalNames[i]}));
+    assert.deepEqual(groundCurrentDrivenPolygons(geometry, {signals})
+      .map(p => p.signalIndex).sort(), [...indices].sort());
+  }
+ });

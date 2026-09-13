@@ -1219,8 +1219,8 @@ btnCancel.addEventListener('click', () => {
 function renderOutputs() {
   const s = store.get();
   renderResults($('#results-summary'), $('#result-matrices'), s.lastSolve, s.mode === 'freeform');
-  $('#log-stdout').textContent = s.lastSolve?.stdout || '—';
-  $('#log-result').textContent = s.lastSolve?.resultText || '—';
+  $('#log-stdout').textContent = s.lastSolve?.stdout || '-';
+  $('#log-result').textContent = s.lastSolve?.resultText || '-';
   renderLoss();
 }
 
@@ -1687,7 +1687,7 @@ function renderLoss() {
       statCard('Insertion loss @ ' + fLabel, `${stats.lossDb.toFixed(2)} dB`, `cond-only ${stats.lossCondDb.toFixed(2)} / diel-only ${stats.lossDielDb.toFixed(2)} dB`),
       statCard(
         'DC resistance',
-        Number.isFinite(stats.rdcOhm) ? `${stats.rdcOhm.toFixed(3)} Ω` : '—',
+        Number.isFinite(stats.rdcOhm) ? `${stats.rdcOhm.toFixed(3)} Ω` : '-',
         s.lossParams.includeReferencePlaneLoss && referencePlane
           ? floatingDifferential
             ? 'driven + return conductor'
@@ -1839,7 +1839,7 @@ btnShare.addEventListener('click', async () => {
     copied = document.execCommand('copy');
     ta.remove();
   }
-  btnShare.textContent = copied ? 'Link copied ✓' : 'Copy failed — use the address bar';
+  btnShare.textContent = copied ? 'Link copied ✓' : 'Copy failed - use the address bar';
   btnShare.classList.replace('btn-outline-primary', copied ? 'btn-success' : 'btn-warning');
   setTimeout(() => {
     btnShare.textContent = 'Share this configuration';

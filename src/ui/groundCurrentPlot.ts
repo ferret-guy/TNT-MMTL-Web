@@ -74,6 +74,26 @@ function appendText(
   return element;
 }
 
+/**
+ * Clearance obstacles for every guided and freeform return-current view.
+ * Resolve the solved signal set by identity, not shape or editor signal count:
+ * electrically reduced return conductors may still be drawn as editor signals.
+ */
+export function groundCurrentDrivenPolygons(
+  geometry: Geometry,
+  distribution: GroundCurrentDistribution,
+): Geometry['polys'] {
+  const conductors = geometry.polys.filter(
+    (poly) => poly.kind === 'conductor' && !poly.isGroundConductor,
+  );
+  const names = new Set(distribution.signals.map((signal) => signal.label));
+  const matched = conductors.filter((poly) =>
+    poly.signalIndex != null && names.has(geometry.signalNames[poly.signalIndex]),
+  );
+  // Analytic presets can use descriptive labels rather than solver names.
+  return names.size > 0 && matched.length === names.size ? matched : conductors;
+}
+
 export function groundCurrentAlignmentOffsetModelUnits(
   geometry: Geometry,
   distribution: GroundCurrentDistribution,
@@ -713,8 +733,7 @@ export function renderGroundCurrentOverlay(
     (viewport.sy(viewport.vy1) - viewport.sy(viewport.vy0)) /
     Math.max(Number.EPSILON, viewport.vy1 - viewport.vy0);
   const maximumSurfaceAmplitude = Math.max(12, Math.min(28, H * 0.1));
-  const signalPolygonsPixels = geometry.polys
-    .filter((poly) => poly.kind === 'conductor' && !poly.isGroundConductor)
+  const signalPolygonsPixels = groundCurrentDrivenPolygons(geometry, distribution)
     .map((poly) => poly.pts.map(([x, y]) => ({ x: sx(x), y: viewport.sy(y) })));
   let minimumSignalClearance = Number.POSITIVE_INFINITY;
   for (const surface of distribution.surfaces ?? []) {

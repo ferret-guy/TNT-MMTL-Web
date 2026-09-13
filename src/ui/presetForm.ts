@@ -130,7 +130,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
       <div class="${compact ? 'col-12' : 'col-6'}">
         <label class="form-label mb-0 small" for="pf-laminate${tail}">Laminate</label>
         <select class="form-select form-select-sm" id="pf-laminate${tail}" aria-describedby="${noteId}">
-          <option value="" ${selectedLaminate ? '' : 'selected'}>— custom —</option>${laminateOptions(selectedLaminate?.id ?? null)}
+          <option value="" ${selectedLaminate ? '' : 'selected'}>- custom -</option>${laminateOptions(selectedLaminate?.id ?? null)}
         </select>
         <div class="form-text mt-1${note ? '' : ' d-none'}" id="${noteId}">${note}</div>
       </div>
@@ -287,7 +287,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
               </svg>
             </span>
             <select class="form-select" id="pf-cover-mat">
-              <option value="custom" ${coverMatch < 0 ? 'selected' : ''}>— custom —</option>${coverOptions}
+              <option value="custom" ${coverMatch < 0 ? 'selected' : ''}>- custom -</option>${coverOptions}
             </select>
           </div>
         </div>
@@ -343,7 +343,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
       <div class="card-body py-2">
         <div class="d-flex align-items-end gap-2 flex-wrap">
           <div>
-            <label class="form-label mb-0 small">Goal seek — auto-tune to a target impedance</label>
+            <label class="form-label mb-0 small">Goal seek - auto-tune to a target impedance</label>
             <div class="input-group input-group-sm">
               <span class="input-group-text">target</span>
               <input type="number" class="form-control" id="gs-target" value="${diff ? 100 : 50}" style="max-width:5.5rem">

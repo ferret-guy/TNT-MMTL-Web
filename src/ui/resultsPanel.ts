@@ -5,7 +5,7 @@ const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const eng = (v: number, digits = 4): string => {
-  if (!Number.isFinite(v)) return '—';
+  if (!Number.isFinite(v)) return '-';
   if (v === 0) return '0';
   return v.toPrecision(digits);
 };
@@ -54,7 +54,7 @@ export function renderResults(
   showAdvancedNames = false,
 ) {
   if (!out) {
-    summaryContainer.innerHTML = `<p class="text-body-secondary mb-0">No results yet — press <strong>Solve</strong>.</p>`;
+    summaryContainer.innerHTML = `<p class="text-body-secondary mb-0">No results yet - press <strong>Solve</strong>.</p>`;
     matricesContainer.innerHTML = '';
     return;
   }
