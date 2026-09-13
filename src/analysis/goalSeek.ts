@@ -1,21 +1,16 @@
-/**
- * Goal seek: tune trace width w (or diff gap s) to a target impedance.
- *
- * Algorithm (per spec):
- *   Phase 1 -- bracket: starting from the current value, jump DOWN or UP by
- *   a factor of 2 (halve/double, in the direction that moves Z toward the
- *   target) for up to 10 rounds until the target is crossed.
- *   Phase 2 -- refine: 10 rounds of bisection inside the bracket.
- *   Then round the variable to 4 significant figures, solve once at the
- *   rounded value, and return that answer.
- *
- * Every evaluation is appended to a detailed log (surfaced in the Log tab);
- * the goal-seek box itself only shows the final answer.
- */
+/** Tune a geometry dimension by sampling both directions, then bisect a bracket. */
 import { buildPreset, type PresetKind, type PresetParams, type PresetVariant } from '../model/presets.ts';
 import { generateXsctn } from '../xsctn/generate.ts';
 
-export type SeekParam = 'w' | 's';
+export type SeekParam = 'w' | 's' | 'cpwGap' | 'cpwGroundWidth';
+export const SEEK_LABELS: Record<SeekParam, string> = {
+  w: 'Trace Width', s: 'Pair Gap', cpwGap: 'Coplanar Gap',
+  cpwGroundWidth: 'Side Ground Width',
+};
+export function seekParams(kind: PresetKind, variant: PresetVariant): SeekParam[] {
+  return ['w', ...(variant === 'diff' ? ['s' as const] : []),
+    ...(kind === 'cpw' ? ['cpwGap' as const, 'cpwGroundWidth' as const] : [])];
+}
 export type SeekMode = 'z0' | 'zdiff' | 'zodd' | 'zeven';
 
 export interface GoalSeekSpec {
@@ -69,6 +64,8 @@ function extractZ(mode: SeekMode, r: MiniSolveResult): number | null {
   }
 }
 
+// Report success only within 0.1% of the requested impedance.
+const TARGET_REL_TOL = 0.001;
 const round4sig = (x: number): number => parseFloat(x.toPrecision(4));
 
 export async function runGoalSeek(
@@ -82,8 +79,7 @@ export async function runGoalSeek(
 
   const evalAt = async (x: number, phase: GoalSeekIter['phase']): Promise<number | null> => {
     const params: PresetParams = { ...p0 };
-    if (spec.seekParam === 'w') params.w = x;
-    else params.s = x;
+    params[spec.seekParam] = x;
     const stackup = buildPreset(spec.kind, spec.variant, params, spec.designFreqHz);
     const out = await solve({
       xsctn: generateXsctn(stackup),
@@ -101,46 +97,43 @@ export async function runGoalSeek(
     return z != null && Number.isFinite(z) ? z : null;
   };
 
-  // direction of dZ/dx: Z falls as w grows; Z (odd/diff/even) rises as s grows
-  const zRisesWithX = spec.seekParam === 's';
-
-  const x0 = spec.seekParam === 'w' ? p0.w : p0.s;
+  const x0 = p0[spec.seekParam];
+  if (!seekParams(spec.kind, spec.variant).includes(spec.seekParam) ||
+      !Number.isFinite(x0) || x0 <= 0 || !Number.isFinite(spec.target) || spec.target <= 0) {
+    return { ok: false, iterations: 0, message: 'Choose a valid positive dimension and target.', log };
+  }
   let xA = x0;
   let zA = await evalAt(xA, 'bracket');
-  if (zA === null) {
-    return { ok: false, iterations: evals, message: 'initial solve failed', log };
-  }
-
-  /* ---- phase 1: halve/double toward the target, max 10 rounds ---- */
-  let xB = xA;
-  let zB = zA;
-  let crossed = Math.sign(zA - spec.target) === 0;
-  for (let round = 0; round < 10 && !crossed; round++) {
-    const needHigherZ = zB < spec.target;
-    const goUp = needHigherZ === zRisesWithX; // grow x if that raises Z toward target
-    const xNext = goUp ? xB * 2 : xB / 2;
-    const zNext = await evalAt(xNext, 'bracket');
-    if (zNext === null) {
-      // solver failed there (geometry too extreme) -- stop expanding
-      log.push(`[bracket] stop: solver failed at ${spec.seekParam} = ${xNext.toPrecision(6)}`);
-      break;
+  if (zA === null) return { ok: false, iterations: evals, message: 'initial solve failed', log };
+  let xB = xA, zB = zA;
+  let crossed = Math.abs(zA - spec.target) / spec.target <= TARGET_REL_TOL;
+  const samples = [{ x: x0, z: zA }];
+  const active = [true, true];
+  // Even-mode coupling and finite side grounds need not follow a fixed slope.
+  for (let round = 1; round <= 10 && !crossed; round++) {
+    for (const direction of [0, 1]) {
+      if (!active[direction]) continue;
+      const x = x0 * 2 ** (direction === 0 ? round : -round);
+      const z = await evalAt(x, 'bracket');
+      if (z === null) { active[direction] = false; continue; }
+      samples.push({ x, z });
+      if (Math.abs(z - spec.target) / spec.target <= TARGET_REL_TOL) {
+        xA = xB = x; zA = zB = z; crossed = true; break;
+      }
+      samples.sort((a, b) => a.x - b.x);
+      for (let i = 1; i < samples.length; i++) {
+        const a = samples[i - 1], b = samples[i];
+        if ((a.z - spec.target) * (b.z - spec.target) <= 0) {
+          xA = a.x; zA = a.z; xB = b.x; zB = b.z; crossed = true; break;
+        }
+      }
+      if (crossed) break;
     }
-    xA = xB;
-    zA = zB;
-    xB = xNext;
-    zB = zNext;
-    crossed = (zA - spec.target) * (zB - spec.target) <= 0;
   }
   if (!crossed) {
-    const best = Math.abs(zB - spec.target) < Math.abs(zA - spec.target) ? { x: xB, z: zB } : { x: xA, z: zA };
-    return {
-      ok: false,
-      x: best.x,
-      z: best.z,
-      iterations: evals,
-      message: `target not crossed within 10 doubling/halving rounds (closest ${best.z.toFixed(2)} Ω at ${spec.seekParam} = ${best.x.toPrecision(5)})`,
-      log,
-    };
+    const best = samples.reduce((a, b) => Math.abs(a.z - spec.target) < Math.abs(b.z - spec.target) ? a : b);
+    return { ok: false, x: best.x, z: best.z, iterations: evals,
+      message: `Target not bracketed within 10 expansion rounds (closest ${best.z.toFixed(2)} Ω).`, log };
   }
 
   /* ---- phase 2: 10 bisection refinements ---- */
@@ -148,7 +141,7 @@ export async function runGoalSeek(
   let hi = Math.max(xA, xB);
   let fLo = lo === xA ? zA! - spec.target : zB! - spec.target;
   let best = Math.abs(zA! - spec.target) < Math.abs(zB! - spec.target) ? { x: xA, z: zA! } : { x: xB, z: zB! };
-  for (let round = 0; round < 10; round++) {
+  for (let round = 0; round < 10 && hi > lo; round++) {
     const mid = (lo + hi) / 2;
     const zMid = await evalAt(mid, 'refine');
     if (zMid === null) break;
@@ -165,14 +158,15 @@ export async function runGoalSeek(
   /* ---- round to 4 significant figures, final answer ---- */
   const xFinal = round4sig(best.x);
   const zFinal = await evalAt(xFinal, 'final');
-  const z = zFinal ?? best.z;
+  if (zFinal === null) return { ok: false, iterations: evals, message: 'Final rounded geometry failed to solve.', log };
+  const z = zFinal;
   log.push(`[final] ${spec.seekParam} = ${xFinal} (4 sig figs) -> ${z.toFixed(3)} ohm`);
   return {
-    ok: true,
+    ok: Math.abs(z - spec.target) / spec.target <= TARGET_REL_TOL,
     x: xFinal,
     z,
     iterations: evals,
-    message: `${spec.seekParam} = ${xFinal} → ${z.toFixed(2)} Ω (${evals} solves)`,
+    message: `${SEEK_LABELS[spec.seekParam]} = ${xFinal} mil → ${z.toFixed(2)} Ω (${evals} solves)${Math.abs(z - spec.target) / spec.target > TARGET_REL_TOL ? "; target tolerance not reached" : ""}`,
     log,
   };
 }

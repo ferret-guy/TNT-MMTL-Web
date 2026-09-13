@@ -1,3 +1,4 @@
+import { SEEK_LABELS, seekParams, type SeekParam } from '../analysis/goalSeek.ts';
 /**
  * Guided preset form: geometry + materials + advanced accordion + goal seek.
  * All dimension fields are canonical-mils dimFields with per-field units.
@@ -45,7 +46,7 @@ const copperWeightOptions = (selectedIndex: number): string => `
 export interface PresetFormHooks {
   onGoalSeek: (
     mode: 'z0' | 'zdiff' | 'zodd' | 'zeven',
-    seekParam: 'w' | 's',
+    seekParam: SeekParam,
     target: number,
   ) => Promise<{ ok: boolean; x?: number; message: string }>;
   /** Refresh post-processing that depends only on reference-plane metadata. */
@@ -355,12 +356,11 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
                 : `<input type="hidden" id="gs-mode" value="z0"><span class="input-group-text">Z₀</span>`}
             </div>
           </div>
-          <div class="btn-group btn-group-sm" role="group">
-            <input type="radio" class="btn-check" name="gs-param" id="gs-param-w" checked>
-            <label class="btn btn-outline-secondary" for="gs-param-w">tune width</label>
-            ${diff ? `
-            <input type="radio" class="btn-check" name="gs-param" id="gs-param-s">
-            <label class="btn btn-outline-secondary" for="gs-param-s">tune gap</label>` : ''}
+          <div class="btn-group btn-group-sm flex-wrap${seekParams(kind, diff ? 'diff' : 'se').length === 1 ? ' d-none' : ''}" role="group" aria-label="Tune dimension">
+            ${seekParams(kind, diff ? 'diff' : 'se').map(key => `
+              <input type="radio" class="btn-check" name="gs-param" id="gs-param-${key}" value="${key}" ${key === 'w' ? 'checked' : ''}>
+              <label class="btn btn-outline-secondary" for="gs-param-${key}">tune ${SEEK_LABELS[key].toLowerCase()}</label>
+            `).join('')}
           </div>
           <button class="btn btn-sm btn-success" id="gs-run">
             <span class="spinner-border spinner-border-sm d-none" id="gs-spinner"></span> Seek
@@ -647,7 +647,7 @@ export function renderPresetForm(container: HTMLElement, hooks: PresetFormHooks)
     const target = num((container.querySelector('#gs-target') as HTMLInputElement).value, diff ? 100 : 50);
     const mode = ((container.querySelector('#gs-mode') as HTMLSelectElement).value || 'z0') as
       | 'z0' | 'zdiff' | 'zodd' | 'zeven';
-    const seekParam = (container.querySelector('#gs-param-s') as HTMLInputElement | null)?.checked ? 's' : 'w';
+    const seekParam = (container.querySelector('input[name="gs-param"]:checked') as HTMLInputElement).value as SeekParam;
     gsBtn.disabled = true;
     gsSpinner.classList.remove('d-none');
     gsResult.textContent = '';

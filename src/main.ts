@@ -1,3 +1,4 @@
+import { SEEK_LABELS, type SeekParam } from './analysis/goalSeek.ts';
 import { SolveWorkEta } from './solver/workEta.mjs';
 import { measuredWorkCosts } from './solver/measuredWorkCosts.mjs';
 import { recordTelemetry } from './solver/telemetry.ts';
@@ -135,9 +136,9 @@ const MILS_PER_METER = 1 / UNIT_SCALE.mils;
 const gsLog = $('#log-goalseek');
 
 function goalSeekHook() {
-  return async (mode: 'z0' | 'zdiff' | 'zodd' | 'zeven', seekParam: 'w' | 's', target: number) => {
+  return async (mode: 'z0' | 'zdiff' | 'zodd' | 'zeven', seekParam: SeekParam, target: number) => {
     const s = store.get();
-    gsLog.textContent = `goal seek: ${mode} -> ${target} Ω, tuning ${seekParam === 'w' ? 'width' : 'gap'}\n`;
+    gsLog.textContent = `goal seek: ${mode} -> ${target} Ω, tuning ${SEEK_LABELS[seekParam]}\n`;
     cancelFieldWork();
     const res = await client.goalSeek(
       {
@@ -158,7 +159,7 @@ function goalSeekHook() {
     );
     if (res.log) gsLog.textContent += res.message + '\n';
     if (res.ok && res.x != null) {
-      const patch = seekParam === 'w' ? { w: res.x } : { s: res.x };
+      const patch = { [seekParam]: res.x };
       store.update({ presetParams: { ...store.get().presetParams, ...patch } });
       // update the field in place (a full re-render would orphan the
       // goal-seek result message the form is about to display).  Read back
@@ -166,7 +167,7 @@ function goalSeekHook() {
       const canonical = store.get().presetParams;
       const updates: Array<[string, number]> = seekParam === 'w'
         ? [['#pf-w', canonical.w], ['#pf-etch', canonical.etch]]
-        : [['#pf-s', canonical.s]];
+        : [[`#pf-${seekParam}`, canonical[seekParam]]];
       const { formatDim } = await import('./ui/dimField.ts');
       for (const [selector, mils] of updates) {
         const field = document.querySelector<HTMLInputElement>(selector);
