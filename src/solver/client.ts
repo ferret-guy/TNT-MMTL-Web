@@ -1,16 +1,20 @@
+import { recordingEnabled, recordTelemetry } from './telemetry.ts';
 /**
  * Main-thread facade over the solver worker: promise-based solve/goalSeek
  * with progress callbacks; cancel = terminate + respawn.
  */
 import type { SolveOutput } from '../model/types.ts';
 import type { GoalSeekIter, GoalSeekOutcome, GoalSeekSpec } from '../analysis/goalSeek.ts';
-import type { SolveProgressPhase } from './solveProgress.ts';
+import type { SolveProgressPhase, SolverWorkSnapshot } from './solveProgress.ts';
+
+let nextTelemetryClientId = 1;
 
 interface Pending {
+  capture?: boolean;
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   onIter?: (it: GoalSeekIter) => void;
-  onProgress?: (frac: number, phase?: SolveProgressPhase) => void;
+  onProgress?: (frac: number, phase?: SolveProgressPhase, estimatedSeconds?: number, work?: SolverWorkSnapshot) => void;
 }
 
 // Public WASM assets keep stable filenames in both Vite development and the
@@ -30,6 +34,7 @@ function versionedBemUrl(threaded = false): string {
 }
 
 export class SolverClient {
+  private readonly telemetryClientId = nextTelemetryClientId++;
   private worker: Worker;
   private pending = new Map<number, Pending>();
   private nextId = 1;
@@ -60,6 +65,10 @@ export class SolverClient {
   private dispatch(msg: { id: number; evt?: string; done?: boolean } & Record<string, unknown>) {
     const p = this.pending.get(msg.id);
     if (!p) return;
+    if (recordingEnabled && p.capture) {
+      const {fieldText: _field, ...recorded} = msg;
+      recordTelemetry('message', {clientId: this.telemetryClientId, ...recorded});
+    }
     if (msg.evt === 'iter') {
       p.onIter?.(msg as unknown as GoalSeekIter);
       return;
@@ -68,8 +77,10 @@ export class SolverClient {
       const progress = msg as unknown as {
         frac: number;
         phase?: SolveProgressPhase;
+        estimatedSeconds?: number;
+        work?: SolverWorkSnapshot;
       };
-      p.onProgress?.(progress.frac, progress.phase);
+      p.onProgress?.(progress.frac, progress.phase, progress.estimatedSeconds, progress.work);
       return;
     }
     this.pending.delete(msg.id);
@@ -81,7 +92,7 @@ export class SolverClient {
     xsctn: string,
     cseg: number,
     dseg: number,
-    onProgress?: (frac: number, phase?: SolveProgressPhase) => void,
+    onProgress?: (frac: number, phase?: SolveProgressPhase, estimatedSeconds?: number, work?: SolverWorkSnapshot) => void,
   ): Promise<SolveOutput> {
     const id = this.nextId++;
     this.busy = true;
@@ -90,8 +101,10 @@ export class SolverClient {
         resolve: resolve as (v: unknown) => void,
         reject,
         onProgress,
+        capture: recordingEnabled,
       });
-      this.worker.postMessage({ id, cmd: 'solve', xsctn, cseg, dseg });
+      recordTelemetry('request', {clientId: this.telemetryClientId, id, xsctn, cseg, dseg});
+      this.worker.postMessage({ id, cmd: 'solve', xsctn, cseg, dseg, recordTelemetry: recordingEnabled });
     });
   }
 

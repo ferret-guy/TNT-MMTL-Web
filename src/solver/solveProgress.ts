@@ -1,3 +1,5 @@
+import type { WorkTracker } from './workEta.mjs';
+export type SolverWorkSnapshot = Omit<WorkTracker, 'feed' | 'enter' | 'shape'>;
 /** Coarse, honest progress milestones emitted by the native MMTL solver. */
 export type SolveProgressPhase =
   | 'initializing'
@@ -12,6 +14,8 @@ export type SolveProgressPhase =
   | 'complete';
 
 export interface SolveProgress {
+  work?: SolverWorkSnapshot;
+  estimatedSeconds?: number;
   fraction: number;
   phase: SolveProgressPhase;
 }

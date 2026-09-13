@@ -1,3 +1,4 @@
+import { WorkTracker } from './workEta.mjs';
 /**
  * Solver Web Worker. Each solve instantiates a FRESH wasm module -- main()
  * leaves file-scope globals and f2c static locals dirty, so instances are
@@ -61,6 +62,7 @@ async function getFactory(url: string) {
 }
 
 export interface SolveRequest {
+  recordTelemetry?: boolean;
   xsctn: string;
   cseg: number;
   dseg: number;
@@ -72,13 +74,15 @@ async function solveOnce(
 ) {
   const t0 = performance.now();
   const stdout: string[] = [];
+  const workTracker = new WorkTracker('serial', Math.min(4, Math.max(1, (navigator.hardwareConcurrency || 2) - 1)));
+  const telemetry: Array<{ms: number; line: string}> | undefined = req.recordTelemetry ? [] : undefined;
   const fineTracker = new FineProgressTracker(req.cseg >= 200);
   const phases: SolveProgress['phase'][] = ['meshing', 'free-space-assembly',
     'free-space-factorization', 'free-space-solves', 'dielectric-assembly',
     'dielectric-factorization', 'finalizing'];
   const progressTracker = { feed: (line: string): SolveProgress | null => {
     const p = fineTracker.feed(line);
-    return p ? { fraction: p.fraction, phase: p.fraction === 1 ? 'complete' : phases[p.stage] } : null;
+    return p ? { estimatedSeconds: p.estimatedSeconds, fraction: p.fraction, phase: p.fraction === 1 ? 'complete' : phases[p.stage] } : null;
   } };
   onProgress?.({ fraction: 0, phase: 'initializing' });
   const instantiate = async (url: string) => {
@@ -86,13 +90,19 @@ async function solveOnce(
     return create({
       print: (s: string) => {
         stdout.push(s);
+        const ms = performance.now() - t0;
+        telemetry?.push({ms, line: s});
+        workTracker.feed(s, ms / 1000);
         const progress = progressTracker.feed(s);
-        if (progress) onProgress?.(progress);
+        if (progress) onProgress?.({...progress, work: {...workTracker}});
       },
       printErr: (s: string) => {
         stdout.push(s);
+        const ms = performance.now() - t0;
+        telemetry?.push({ms, line: s});
+        workTracker.feed(s, ms / 1000);
         const progress = progressTracker.feed(s);
-        if (progress) onProgress?.(progress);
+        if (progress) onProgress?.({...progress, work: {...workTracker}});
       },
       locateFile: (f: string, prefix: string) =>
         f.endsWith('.wasm') ? versionedWasmUrl(url) : prefix + f,
@@ -148,6 +158,9 @@ async function solveOnce(
       stdout: log,
       resultText,
       fieldText,
+      telemetry,
+      workerTimeOrigin: telemetry ? performance.timeOrigin : undefined,
+      workerStartedAt: telemetry ? t0 : undefined,
       elapsedMs: Math.round(performance.now() - t0),
       result,
       error: error ?? parseError,
@@ -170,7 +183,9 @@ self.onmessage = async (ev: MessageEvent) => {
           id: msg.id,
           evt: 'progress',
           frac: progress.fraction,
+          estimatedSeconds: progress.estimatedSeconds,
           phase: progress.phase,
+          work: progress.work,
         }),
       );
       (self as unknown as Worker).postMessage({ id: msg.id, ...out });

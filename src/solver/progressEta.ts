@@ -1,6 +1,6 @@
 /** Time-weighted exponential smoothing of completed work per millisecond.
- * Aggregate native callbacks into >=250 ms samples; a 3 s time constant
- * prevents callback frequency from changing the smoothing strength.
+ * Aggregate native callbacks into >=250 ms samples. The configurable time
+ * constant (3 s default, 15 s in the UI) is independent of callback frequency.
  */
 export class ProgressEta {
   private initialDurationSeconds: number;
@@ -9,9 +9,17 @@ export class ProgressEta {
   private fraction = 0;
   private smoothedWork = 0;
   private smoothedTime = 0;
-  constructor(now: number, initialDurationSeconds = 1) {
+  private readonly smoothingSeconds: number;
+  constructor(now: number, initialDurationSeconds = 1, smoothingSeconds = 3) {
+    this.smoothingSeconds = Number.isFinite(smoothingSeconds) && smoothingSeconds > 0 ? smoothingSeconds : 3;
     this.sampledAt = now;
     this.initialDurationSeconds = Number.isFinite(initialDurationSeconds) && initialDurationSeconds > 0 ? initialDurationSeconds : 1;
+  }
+  seedDuration(seconds: number): void {
+    if (!(seconds > 0) || !Number.isFinite(seconds)) return;
+    this.initialDurationSeconds = seconds;
+    this.smoothedTime = 1000;
+    this.smoothedWork = 1 / seconds;
   }
   update(fraction: number, now: number): void {
     if (!Number.isFinite(fraction) || !Number.isFinite(now)) return;
@@ -19,7 +27,7 @@ export class ProgressEta {
     this.fraction = next;
     const dt = now - this.sampledAt;
     if (dt < 250) return;
-    const alpha = 1 - Math.exp(-dt / 3000);
+    const alpha = 1 - Math.exp(-dt / (1000 * this.smoothingSeconds));
     this.smoothedWork = alpha * (next - this.sampledFraction) + (1 - alpha) * this.smoothedWork;
     this.smoothedTime = alpha * dt + (1 - alpha) * this.smoothedTime;
     this.sampledFraction = next;

@@ -1,4 +1,7 @@
-import { ProgressEta, formatEta } from './solver/progressEta.ts';
+import { SolveWorkEta } from './solver/workEta.mjs';
+import { measuredWorkCosts } from './solver/measuredWorkCosts.mjs';
+import { recordTelemetry } from './solver/telemetry.ts';
+import { formatEta } from './solver/progressEta.ts';
 /**
  * App bootstrap: wiring between store, solver client, and UI panels.
  */
@@ -729,11 +732,12 @@ const solveProgressLabel = $('#solve-progress-label');
 const solveElapsed = $('#solve-elapsed');
 let solveProgressTimer: number | undefined;
 let solveStartedAt = 0;
-let solveEta = new ProgressEta(0);
+let solveEta = new SolveWorkEta(measuredWorkCosts, []);
 function finishSolveProgress(label: string) {
   window.clearInterval(solveProgressTimer);
   solveElapsed.textContent = `${Math.floor((performance.now() - solveStartedAt) / 1000)} s`;
   solveProgressLabel.textContent = label;
+  recordTelemetry('run-end', {label});
 }
 const solvePhaseLabels: Record<string, string> = {
   initializing: 'Preparing mesh', meshing: 'Meshing',
@@ -806,15 +810,19 @@ async function doSolve() {
   btnCancel.classList.toggle('d-none', false);
   window.clearInterval(solveProgressTimer);
   solveStartedAt = performance.now();
+  recordTelemetry('run-start', {generation, state: s, stackup});
   const meshSize = Math.max(stackup.cseg, stackup.dseg);
   const initialSpeedup = crossOriginIsolated && meshSize >= 128 ? 4 : 1;
-  solveEta = new ProgressEta(solveStartedAt, Math.max(1, 1.06 * (meshSize / 45) ** 2 / initialSpeedup));
+  solveEta = new SolveWorkEta(measuredWorkCosts, [], Math.max(1, 1.06 * (meshSize / 45) ** 2 / initialSpeedup));
   solveProgressBar.value = 0;
   solveProgressPanel.classList.remove('d-none');
   solveProgressLabel.textContent = 'Preparing mesh';
-  solveElapsed.textContent = `0 s elapsed · ${formatEta(solveEta.remainingSeconds(solveStartedAt))}`;
+  solveElapsed.textContent = `0 s elapsed · ${formatEta(solveEta.read(0).remaining)}`;
   solveProgressTimer = window.setInterval(() => {
-    solveElapsed.textContent = `${Math.floor((performance.now() - solveStartedAt) / 1000)} s elapsed · ${formatEta(solveEta.remainingSeconds(performance.now()))}`;
+    const elapsed = (performance.now() - solveStartedAt) / 1000;
+    const estimate = solveEta.read(elapsed);
+    recordTelemetry('estimate', {elapsed, ...estimate});
+    solveElapsed.textContent = `${Math.floor(elapsed)} s elapsed · ${formatEta(estimate.remaining)}`;
   }, 100);
   try {
     const explicitPreparation = isExplicitReferenceStackup(stackup)
@@ -829,23 +837,25 @@ async function doSolve() {
       if (s.mode === 'freeform') plannedParticipation = dielectricParticipationPerturbation(nativeStackup);
     } catch { /* The existing loss-analysis error handler reports this later. */ }
     const needsAir = !explicitPreparation || generateXsctn(freeSpaceStackup(nativeStackup)) !== xsctn;
-    const jobs = [{ label: 'Impedance', weight: 1 },
-      ...(needsAir ? [{ label: 'Current and loss', weight: 0.05 }] : []),
-      ...(plannedParticipation ? [{ label: 'Dielectric loss 1/2', weight: 1 }, { label: 'Dielectric loss 2/2', weight: 1 }] : [])];
-    const totalWeight = jobs.reduce((sum, job) => sum + job.weight, 0);
-    let jobIndex = 0, finishedWeight = 0;
-    const solveWithProgress = (input: string, cseg: number, dseg: number) => {
-      const job = jobs[jobIndex++];
-      const lower = finishedWeight / totalWeight;
-      finishedWeight += job.weight;
-      const span = job.weight / totalWeight;
-      return client.solve(input, cseg, dseg, (fraction, phase) => {
-        if (generation !== solveGeneration) return;
-        const value = 99.99 * (lower + span * fraction);
-        solveProgressBar.value = Math.max(solveProgressBar.value, value);
-        solveEta.update(solveProgressBar.value / 100, performance.now());
+    const jobs = [{ label: 'Impedance', role: 'dielectric' },
+      ...(needsAir ? [{ label: 'Current and loss', role: 'air' }] : []),
+      ...(plannedParticipation ? [{ label: 'Dielectric loss 1/2', role: 'dielectric' }, { label: 'Dielectric loss 2/2', role: 'dielectric' }] : [])];
+    recordTelemetry('plan', {generation, jobs});
+    solveEta.roles = jobs.map(job => job.role);
+    let jobIndex = 0;
+    const solveWithProgress = async (input: string, cseg: number, dseg: number) => {
+      const index = jobIndex++, job = jobs[index];
+      solveEta.begin(index, (performance.now() - solveStartedAt) / 1000,
+        crossOriginIsolated && Math.max(cseg, dseg) >= 128 ? 'eigen' : 'serial');
+      const output = await client.solve(input, cseg, dseg, (_fraction, phase, _estimatedSeconds, work) => {
+        if (generation !== solveGeneration || !work) return;
+        solveEta.apply(work);
+        const estimate = solveEta.read((performance.now() - solveStartedAt) / 1000);
+        solveProgressBar.value = Math.max(solveProgressBar.value, 100 * estimate.progress);
         solveProgressLabel.textContent = `${Math.min(99.9, solveProgressBar.value).toFixed(1)}% · ${job.label}: ${solvePhaseLabels[phase ?? 'initializing']}`;
       });
+      if (generation === solveGeneration) solveEta.finish((performance.now() - solveStartedAt) / 1000);
+      return output;
     };
     const solveKey = `${xsctn}|${nativeStackup.cseg}|${nativeStackup.dseg}`;
     // mark this input as handled even if it fails: auto-solve must not

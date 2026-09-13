@@ -1,0 +1,114 @@
+{
+  "recordingDate": "2026-09-12",
+  "cases": 28,
+  "passes": 70,
+  "nativeEvents": 219214,
+  "recordedSolveSeconds": 1864.6945999996663,
+  "rawIndexSha256": "cef11b03d21baefbefb9cb8a80aa47c6494ac76d7e5be5fba097dff6a7ba6073",
+  "estimatorSha256": "4ac96a8c130db4e3170389da942f0722191b59de9434462bbfb0b3157a798b75",
+  "costModel": {
+    "conductor": 30.41500662480582,
+    "dielectric": 7.40922383772066,
+    "overhead": 0.024730000138282776,
+    "lu": {
+      "serial": 0.25287480344711666,
+      "eigen": 0.047956150489370075
+    }
+  },
+  "fittedCoefficientCount": 5,
+  "durationPolicy": {
+    "under10": "ungraded",
+    "10to30": "up to 50%",
+    "30to60": "informational",
+    "over60": "stripline <10%, freeform <25%"
+  },
+  "simplifiedHeldoutLongCases": [
+    {
+      "id": "006",
+      "label": "Belden 9R280 five-signal wide ribbon",
+      "mesh": 45,
+      "duration": 83.81046499991417,
+      "median": 3.641795329437711,
+      "p90": 7.405266798156,
+      "max": 8.33772992717359
+    },
+    {
+      "id": "018",
+      "label": "Belden 9R280 G-S-G ribbon benchmark",
+      "mesh": 200,
+      "duration": 120.13952999997139,
+      "median": 1.073075554644098,
+      "p90": 4.519580640532849,
+      "max": 5.983419736216584
+    },
+    {
+      "id": "019",
+      "label": "Belden 9R280 five-signal wide ribbon",
+      "mesh": 200,
+      "duration": 615.2546800000667,
+      "median": 1.6294665913991262,
+      "p90": 4.505914619336606,
+      "max": 5.376351902466279
+    },
+    {
+      "id": "020",
+      "label": "Belden Cat5e pair",
+      "mesh": 200,
+      "duration": 123.745375,
+      "median": 2.058599773576612,
+      "p90": 15.564483363945197,
+      "max": 17.815406024002698
+    },
+    {
+      "id": "026",
+      "label": "Guided cpw diff",
+      "mesh": 200,
+      "duration": 76.81655999994278,
+      "median": 2.9552016493217383,
+      "p90": 3.4611367314007047,
+      "max": 4.19540397245101
+    },
+    {
+      "id": "028",
+      "label": "Belden 9R280 G-S-G ribbon benchmark",
+      "mesh": 400,
+      "duration": 637.0941650002003,
+      "median": 2.325846746655095,
+      "p90": 12.84444896269262,
+      "max": 14.473078632150354
+    }
+  ],
+  "crossDeviceValidation": "Pending actual other-device recordings; LAN HTTP uses serial WASM.",
+  "settlingSeconds": 0.1,
+  "validation": "Geometry-family held-out replay; six original solves exceeded 60 seconds, none stripline. Hardware transfer not established by this dataset.",
+  "integrationChecks": [
+    {
+      "run": "5226181c-e89e-4126-8e6b-cd01d30db4af",
+      "conformance": [
+        {
+          "file": "010.json",
+          "samples": 8,
+          "maxEtaDifferenceSeconds": 1.9999980926554972e-05,
+          "maxProgressDifference": 1.2373909350271717e-05
+        },
+        {
+          "file": "023.json",
+          "samples": 46,
+          "maxEtaDifferenceSeconds": 3.499984741228701e-05,
+          "maxProgressDifference": 3.553826369240287e-06
+        }
+      ]
+    },
+    {
+      "run": "6df4a9f2-8a63-4f52-bea0-cb26a6c411c1",
+      "conformance": [
+        {
+          "file": "023.json",
+          "samples": 190,
+          "maxEtaDifferenceSeconds": 9.999990463427366e-05,
+          "maxProgressDifference": 5.202826643735392e-06
+        }
+      ]
+    }
+  ]
+}

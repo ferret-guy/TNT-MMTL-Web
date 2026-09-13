@@ -1,0 +1,64 @@
+<!doctype html><meta charset="utf-8"><title>Live ETA benchmark</title>
+<style>body{font:16px system-ui;margin:20px}iframe{width:100%;height:650px;border:1px solid #888}pre{white-space:pre-wrap}button{padding:10px}</style>
+<h1>Live ETA benchmark</h1><p>28 sequential production-page solves. Samples are the displayed ETA and progress, taken every 100 ms. Results are sent to the benchmark server. Keep this tab visible. LAN HTTP runs use the serial solver; localhost may use threads.</p>
+<label>Device name <input id="device" placeholder="e.g. laptop Chrome"></label> <button id="start">Start / resume benchmark</button> <button id="new">New run</button> <a href="/results" target="_blank">Device results</a><p id="status">Ready</p><pre id="completed"></pre><iframe id="app" title="Calculator under test"></iframe>
+<script type="module">
+const manifest=await (await fetch('/__eta-manifest')).json();
+const selected=new URLSearchParams(location.search).get('cases')?.split(',');
+if(selected)manifest.cases=manifest.cases.filter(c=>selected.includes(c.id));
+document.querySelector('h1').textContent=`Live ETA benchmark: ${manifest.cases.length} cases`;
+document.querySelector('p').textContent='Sequential real-page solves with complete native timing traces and displayed samples. Results are sent to the benchmark server. Keep this tab visible. LAN HTTP runs use the serial solver; localhost may use threads.';
+let runId=null;
+const dataUrl=()=>'/__eta-data?run='+runId;
+const visibilityEvents=[];document.addEventListener('visibilitychange',()=>visibilityEvents.push({at:Date.now(),hidden:document.hidden}));
+document.querySelector('#status')?.append(` | ${crossOriginIsolated?'Threaded solver available':'Serial solver (HTTP LAN context)'}`);
+const app=document.querySelector('#app'),status=document.querySelector('#status'),completed=document.querySelector('#completed');
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+function etaSeconds(text){const m=text.match(/(?:([\d]+) min )?([\d]+) s left/);return m?60*Number(m[1]||0)+Number(m[2]):null;}
+async function run(c){
+ const samples=[];let started=null,finished=false,lastText='',lastProgress=-1;
+ while(document.hidden){status.textContent='Bring this tab to the foreground to continue.';await pause(500);}
+ const visibilityStart=visibilityEvents.length;
+ const navigationAt=performance.now();app.src=c.url.replace('http://127.0.0.1:5179',location.origin).replace(location.origin+'/',location.origin+'/index.html').replace('?eta-measure=', '?eta-record=1&eta-measure=');
+ while(!finished){
+  await pause(100);
+  let doc;try{doc=app.contentDocument;}catch{continue;}
+  if(!doc?.querySelector('#btn-solve'))continue;
+  const now=performance.now();
+  const active=doc.querySelector('#btn-solve').disabled && !doc.querySelector('#solve-progress')?.classList.contains('d-none');
+  const text=doc.querySelector('#solve-elapsed')?.textContent||'';
+  const phase=doc.querySelector('#solve-progress-label')?.textContent||'';
+  const progress=Number(doc.querySelector('#solve-progress-bar')?.value||0);
+  const runStart=app.contentWindow.__etaRecording?.events?.find(e=>e.type==='run-start');
+  if(started===null&&(active||runStart))started=now-(runStart?app.contentWindow.performance.now()-runStart.at:0);
+  if(started!==null){
+   const eta=etaSeconds(text);
+   samples.push({ms:now-started,progress,etaSeconds:eta,text,phase,active});
+   status.textContent=`${c.id} ${c.label}, ${c.mesh} segments: ${phase} ${text}`;
+   if((phase==='Complete'||phase==='Solve failed')&&!doc.querySelector('#btn-solve').disabled){
+    const result={...c,actualUrl:app.contentWindow.location.href,recording:app.contentWindow.__etaRecording,samples,elapsedMs:now-started,navigationMs:now-navigationAt,success:progress>=99.99,
+      finalText:doc.querySelector('#solve-note')?.textContent||'',
+      nativeLog:doc.querySelector('#log-stdout')?.textContent||'',
+      browser:navigator.userAgent,crossOriginIsolated,visibilityEvents:visibilityEvents.slice(visibilityStart),device:{name:document.querySelector('#device').value,userAgent:navigator.userAgent,hardwareConcurrency:navigator.hardwareConcurrency,deviceMemory:navigator.deviceMemory,secureContext:isSecureContext}};
+    const saved=await fetch(dataUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(result)});
+    if(!saved.ok)throw Error('Could not save result');
+    completed.textContent+=`${c.id}: ${c.label} @ ${c.mesh}: ${(result.elapsedMs/1000).toFixed(1)} s; ${result.success?'complete':'FAILED'}\n`;
+    finished=true;
+   }
+  }
+  if(now-navigationAt>3600000)throw Error('Case exceeded one hour');
+ }
+ app.src='about:blank';await pause(500);
+}
+document.querySelector('#start').onclick=async()=>{
+ document.querySelector('#start').disabled=true;
+ try{
+
+ const session=await fetch('/__eta-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resume:localStorage.getItem('eta-device-run'),device:{name:document.querySelector('#device').value||'Unnamed device',userAgent:navigator.userAgent,hardwareConcurrency:navigator.hardwareConcurrency,deviceMemory:navigator.deviceMemory}})});
+ if(!session.ok)throw Error('Could not register device');
+ runId=(await session.json()).id;localStorage.setItem('eta-device-run',runId);
+ const recorded=await (await fetch(dataUrl())).json();for(const c of manifest.cases)if(!recorded.includes(c.id))await run(c);status.textContent=`Benchmark complete: ${manifest.cases.length} selected cases recorded.`;}
+ catch(e){status.textContent='Benchmark stopped: '+e.message;}finally{document.querySelector('#start').disabled=false;}
+};
+document.querySelector('#new').onclick=()=>{if(document.querySelector('#start').disabled)return;localStorage.removeItem('eta-device-run');completed.textContent='';status.textContent='Ready for a new run.';};
+</script>

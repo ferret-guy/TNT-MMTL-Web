@@ -20,7 +20,12 @@
     "test": "npm run typecheck && npm run sanity",
     "test:interop": "node --test tests/integration/model-export-interop-test.mjs",
     "golden": "node tests/golden/run-golden.mjs",
-    "sanity": "node tests/physics/sanity.mjs && node --test tests/physics/about-example-links-test.mjs tests/physics/about-example-views-test.mjs tests/physics/circle-trapezoid-dielectric-test.mjs tests/physics/crosstalk-test.mjs tests/physics/etch-total-reduction-test.mjs tests/physics/explicit-reference-field-test.mjs tests/physics/explicit-reference-test.mjs tests/physics/freeform-examples-test.mjs tests/physics/ground-current-test.mjs tests/physics/ladder-sections-test.mjs tests/physics/losses-test.mjs tests/physics/mesh-reference-loss-test.mjs tests/physics/model-export-test.mjs tests/physics/parse-result-warning-test.mjs tests/physics/potential-field-test.mjs tests/physics/propagation-display-test.mjs tests/physics/stripline-materials-test.mjs tests/physics/numerical-stability-test.mjs tests/physics/progress-eta-test.mjs tests/physics/startup-mesh-test.mjs"
+    "sanity": "node tests/physics/sanity.mjs && node --test tests/physics/about-example-links-test.mjs tests/physics/about-example-views-test.mjs tests/physics/circle-trapezoid-dielectric-test.mjs tests/physics/crosstalk-test.mjs tests/physics/etch-total-reduction-test.mjs tests/physics/explicit-reference-field-test.mjs tests/physics/explicit-reference-test.mjs tests/physics/freeform-examples-test.mjs tests/physics/ground-current-test.mjs tests/physics/ladder-sections-test.mjs tests/physics/losses-test.mjs tests/physics/mesh-reference-loss-test.mjs tests/physics/model-export-test.mjs tests/physics/parse-result-warning-test.mjs tests/physics/potential-field-test.mjs tests/physics/propagation-display-test.mjs tests/physics/stripline-materials-test.mjs tests/physics/numerical-stability-test.mjs tests/physics/progress-eta-test.mjs tests/physics/complex-progress-test.mjs tests/physics/startup-mesh-test.mjs tests/physics/work-eta-test.mjs",
+    "benchmark:eta:record": "node tests/benchmarks/eta/serve.mjs",
+    "benchmark:eta:replay": "python tests/benchmarks/eta/validate.py && python tests/benchmarks/eta/fit.py && node tests/benchmarks/eta/replay.mjs",
+    "benchmark:eta:sweep": "node tests/benchmarks/eta/sweep.mjs",
+    "benchmark:eta:report": "python tests/benchmarks/eta/report.py",
+    "benchmark:eta:devices": "npm run build && node tests/benchmarks/eta/devices-server.mjs"
   },
   "devDependencies": {
     "@types/bootstrap": "^5.2.11",
